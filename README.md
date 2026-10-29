@@ -33,4 +33,4 @@ npm run ingest
 npm run dev
 ```
 
-The dev server listens on port 43127.
+The dev server listens on port 43127, on both IPv4 and IPv6, so `http://127.0.0.1:43127` and `http://localhost:43127` reach the same process.
