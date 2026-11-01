@@ -35,3 +35,11 @@ npm run dev
 ```
 
 The dev server listens on port 43127, on both IPv4 and IPv6, so `http://127.0.0.1:43127` and `http://localhost:43127` reach the same process.
+
+## Static HTML
+
+```bash
+npm run export:html
+```
+
+That writes `export/index.html`, a single file you can open in a browser with no server. The same file is copied to `public/knicks.html` and served at `/knicks.html` while the dev server is running.

@@ -8,6 +8,7 @@
     "start": "next start -p 43127 -H ::",
     "lint": "eslint",
     "ingest": "tsx scripts/ingest.ts",
+    "export:html": "tsx scripts/export-static.ts",
     "check-sample": "tsx scripts/check-sample.ts"
   },
   "dependencies": {
