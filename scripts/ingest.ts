@@ -1,7 +1,8 @@
 import { ingest } from "../src/lib/ingest";
 
 async function main() {
-  const result = await ingest();
+  const refreshAll = process.argv.includes("--all");
+  const result = await ingest({ refreshAll });
 console.log(
   JSON.stringify(
     {

@@ -97,6 +97,15 @@ export interface FlowPoint {
   opponent: number;
 }
 
+/** Two Knicks on the floor at the same time. Ids are sorted. */
+export interface CourtPair {
+  a: string;
+  b: string;
+  seconds: number;
+  pts: number;
+  opp: number;
+}
+
 export interface Game {
   id: string;
   season: string;
@@ -122,6 +131,8 @@ export interface Game {
   flow: FlowPoint[];
   /** Max absolute gap between reconstructed plus-minus and the box score. */
   lineupError: number;
+  /** Shared on-court time for each Knicks pairing. Missing on older snapshots. */
+  pairs?: CourtPair[];
 }
 
 export interface Store {

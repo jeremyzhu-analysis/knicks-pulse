@@ -21,8 +21,8 @@ export function QuarterBars({
   });
   const peak = Math.max(4, ...values.map((value) => Math.abs(value)));
   const width = 860;
-  const height = 240;
-  const pad = { l: 36, r: 12, t: 16, b: 36 };
+  const height = 280;
+  const pad = { l: 36, r: 12, t: 28, b: 36 };
   const zero = pad.t + (height - pad.t - pad.b) / 2;
   const unit = (height - pad.t - pad.b) / 2 / peak;
   const groupW = (width - pad.l - pad.r) / periods.length;
@@ -42,15 +42,15 @@ export function QuarterBars({
           const then = previous?.find((quarter) => quarter.period === period);
           const cx = pad.l + groupW * index + groupW / 2;
           const bars = [
-            { value: now?.margin ?? 0, fill: "#e07a3d", dx: previous ? -11 : 0 },
-            previous ? { value: then?.margin ?? 0, fill: "#8a847c", dx: 11 } : null,
+            { value: now?.margin ?? 0, fill: "#e07a3d", dx: previous ? -16 : 0 },
+            previous ? { value: then?.margin ?? 0, fill: "#5c5852", dx: 16 } : null,
           ].filter((bar): bar is { value: number; fill: string; dx: number } => Boolean(bar));
           return (
             <g key={period}>
               {bars.map((bar) => {
                 const h = Math.abs(bar.value) * unit;
                 const y = bar.value >= 0 ? zero - h : zero;
-                return <rect key={bar.fill} x={cx + bar.dx - 7} y={y} width="14" height={Math.max(h, 1)} fill={bar.fill} />;
+                return <rect key={bar.fill} x={cx + bar.dx - 12} y={y} width="24" height={Math.max(h, 1)} fill={bar.fill} />;
               })}
               <text
                 x={cx}
@@ -76,15 +76,18 @@ export function QuarterBars({
           );
         })}
       </svg>
-      <p className="mt-2 text-[12px] text-muted">
-        <span className="text-knicks">Orange</span> is {currentLabel}
+      <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[12px] text-muted">
+        <span>
+          <span className="mr-2 inline-block h-2.5 w-2.5 bg-knicks" />
+          {currentLabel}
+        </span>
         {previousLabel ? (
-          <>
-            . <span className="text-faint">Gray</span> is {previousLabel}. The number above each group is this season.
-          </>
-        ) : (
-          ". Bars are the average point margin in that quarter."
-        )}
+          <span>
+            <span className="mr-2 inline-block h-2.5 w-2.5 bg-[#5c5852]" />
+            {previousLabel}
+          </span>
+        ) : null}
+        <span>Number above the pair is this season.</span>
       </p>
     </div>
   );
@@ -99,9 +102,10 @@ export function FlowChart({ flow }: { flow: FlowPoint[] }) {
   const peak = Math.max(6, ...flow.map((point) => Math.abs(point.margin)));
   const x = (elapsed: number) => pad.l + (elapsed / maxElapsed) * (width - pad.l - pad.r);
   const y = (margin: number) => pad.t + ((peak - margin) / (peak * 2)) * (height - pad.t - pad.b);
-  const d = flow
+  const line = flow
     .map((point, index) => `${index === 0 ? "M" : "L"}${x(point.elapsed).toFixed(1)},${y(point.margin).toFixed(1)}`)
     .join(" ");
+  const area = `${line} L${x(flow[flow.length - 1]?.elapsed ?? 0).toFixed(1)},${y(0).toFixed(1)} L${x(flow[0]?.elapsed ?? 0).toFixed(1)},${y(0).toFixed(1)} Z`;
   const marks = [720, 1440, 2160, 2880].filter((mark) => mark <= maxElapsed + 1);
 
   return (
@@ -115,7 +119,8 @@ export function FlowChart({ flow }: { flow: FlowPoint[] }) {
           </text>
         </g>
       ))}
-      <path d={d} fill="none" stroke="#e07a3d" strokeWidth="1.7" />
+      <path d={area} fill="#e07a3d" opacity="0.18" />
+      <path d={line} fill="none" stroke="#e07a3d" strokeWidth="2.2" />
       <text x={0} y={y(peak) + 4} fill="#a39e94" fontSize="11" fontFamily="Arial, Helvetica, sans-serif">
         +{peak.toFixed(0)}
       </text>

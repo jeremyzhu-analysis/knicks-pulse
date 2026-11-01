@@ -40,16 +40,28 @@ export function MarginChart({
   }
 
   const selected = games[Math.min(active, games.length - 1)];
-  let path = "";
-  let penDown = false;
+  const runs: { index: number; value: number }[][] = [];
+  let run: { index: number; value: number }[] = [];
   rolling.forEach((value, index) => {
     if (value == null) {
-      penDown = false;
+      if (run.length) runs.push(run);
+      run = [];
       return;
     }
-    path += `${penDown ? "L" : "M"}${x(index).toFixed(1)},${y(value).toFixed(1)} `;
-    penDown = true;
+    run.push({ index, value });
   });
+  if (run.length) runs.push(run);
+  const path = runs
+    .map((points) => points.map((point, index) => `${index === 0 ? "M" : "L"}${x(point.index).toFixed(1)},${y(point.value).toFixed(1)}`).join(" "))
+    .join(" ");
+  const areaParts = runs
+    .filter((points) => points.length > 1)
+    .map((points) => {
+      const line = points.map((point, index) => `${index === 0 ? "M" : "L"}${x(point.index).toFixed(1)},${y(point.value).toFixed(1)}`).join(" ");
+      const last = points[points.length - 1];
+      const first = points[0];
+      return `${line} L${x(last.index).toFixed(1)},${y(0).toFixed(1)} L${x(first.index).toFixed(1)},${y(0).toFixed(1)} Z`;
+    });
 
   return (
     <div>
@@ -86,14 +98,19 @@ export function MarginChart({
             {tick > 0 ? `+${tick}` : tick}
           </text>
         ))}
-        <path d={path.trim()} fill="none" stroke="#f4f1ea" strokeWidth="1.6" />
+        {areaParts.map((part, index) => (
+          <path key={index} d={part} fill="#f4f1ea" opacity="0.08" />
+        ))}
+        <path d={path} fill="none" stroke="#f4f1ea" strokeWidth="2.2" />
         {games.map((game, index) => (
           <a key={game.id} href={`/games/${game.id}`}>
             <circle
               cx={x(index)}
               cy={y(game.margin)}
-              r={active === index ? 5 : 3.4}
+              r={active === index ? 7 : 4.5}
               fill={game.win ? "#e07a3d" : "#7eadd4"}
+              stroke={active === index ? "#f4f1ea" : "none"}
+              strokeWidth="1.5"
               onMouseEnter={() => setActive(index)}
               onFocus={() => setActive(index)}
             >
@@ -104,17 +121,23 @@ export function MarginChart({
           </a>
         ))}
       </svg>
-      <p className="mt-3 max-w-[68ch] text-[15px] leading-relaxed">
-        <Link href={`/games/${selected.id}`} className="text-ink">
-          {etDate(selected.date)}
-        </Link>
-        . Knicks {selected.knicksScore}, {selected.opponentName} {selected.opponentScore} ({place(selected.home, selected.neutral)}{" "}
-        {selected.opponentAbbr}). Margin {signed(selected.margin, 0)}. Offensive rating {selected.ortg.toFixed(1)}, defensive
-        rating {selected.drtg.toFixed(1)}.
-      </p>
-      <p className="mt-2 text-[12px] text-muted">
-        Orange is a win, blue is a loss. The line is the {windowSize}-game average margin. Zero is an even game.
-      </p>
+      <div className="mt-4 flex flex-wrap items-end gap-6 border-t border-rule pt-4">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.14em] text-muted">Margin</p>
+          <p className={`tabular text-[42px] font-bold leading-none ${selected.margin >= 0 ? "text-knicks" : "text-opp"}`}>
+            {signed(selected.margin, 0)}
+          </p>
+        </div>
+        <div className="pb-1 text-[14px]">
+          <Link href={`/games/${selected.id}`} className="text-ink">
+            {etDate(selected.date)} · {place(selected.home, selected.neutral)} {selected.opponentAbbr}
+          </Link>
+          <p className="text-muted">
+            {selected.knicksScore}–{selected.opponentScore} · Off {selected.ortg.toFixed(1)} · Def {selected.drtg.toFixed(1)}
+          </p>
+        </div>
+      </div>
+      <p className="mt-3 text-[12px] text-muted">Orange win. Blue loss. White line, {windowSize}-game average.</p>
     </div>
   );
 }

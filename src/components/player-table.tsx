@@ -22,6 +22,30 @@ export interface PlayerTableRow extends PlayerRollup {
   previousOnOff: number | null;
 }
 
+function chip(kind: string): string {
+  if (kind === "drag") return "bg-[#3a2422] text-loss";
+  if (kind === "lift" || kind === "twoway") return "bg-[#243024] text-gain";
+  if (kind === "scoring" || kind === "creation") return "bg-[#3a2618] text-knicks";
+  return "bg-[#1c1c1c] text-muted";
+}
+
+function Swing({ value }: { value: number | null }) {
+  if (value == null) return null;
+  const t = Math.max(-1, Math.min(1, value / 20));
+  return (
+    <span className="ml-2 inline-block h-1.5 w-8 bg-[#1a1a1a] align-middle">
+      <span
+        className="block h-full"
+        style={{
+          width: `${Math.abs(t) * 50}%`,
+          marginLeft: t >= 0 ? "50%" : `${(1 - Math.abs(t)) * 50}%`,
+          background: t >= 0 ? "#e07a3d" : "#7eadd4",
+        }}
+      />
+    </span>
+  );
+}
+
 export function PlayerTable({ rows, compareLabel }: { rows: PlayerTableRow[]; compareLabel?: string }) {
   const [key, setKey] = useState<Key>("mpg");
   const [dir, setDir] = useState<"desc" | "asc">("desc");
@@ -89,6 +113,7 @@ export function PlayerTable({ rows, compareLabel }: { rows: PlayerTableRow[]; co
                 return (
                   <td key={column.key} className="tabular px-2 py-2 text-right text-[14px]">
                     {text}
+                    {column.key === "onOff" ? <Swing value={typeof value === "number" ? value : null} /> : null}
                   </td>
                 );
               })}
@@ -97,8 +122,10 @@ export function PlayerTable({ rows, compareLabel }: { rows: PlayerTableRow[]; co
                   {player.previousOnOff == null ? "—" : signed(player.previousOnOff)}
                 </td>
               ) : null}
-              <td className="py-2 pl-3 text-[13px] text-muted" title={player.impact.sentence}>
-                {player.impact.title}
+              <td className="py-2 pl-3" title={player.impact.sentence}>
+                <span className={`inline-block px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] ${chip(player.impact.kind)}`}>
+                  {player.impact.title}
+                </span>
               </td>
             </tr>
           ))}

@@ -171,8 +171,9 @@ function releaseLock(): void {
   }
 }
 
-export async function ingest(options?: { refreshRecentHours?: number }): Promise<IngestResult> {
+export async function ingest(options?: { refreshRecentHours?: number; refreshAll?: boolean }): Promise<IngestResult> {
   const refreshRecentHours = options?.refreshRecentHours ?? 36;
+  const refreshAll = options?.refreshAll ?? false;
   const existing = readStore();
   const base: IngestResult = {
     added: [],
@@ -211,7 +212,7 @@ export async function ingest(options?: { refreshRecentHours?: number }): Promise
     for (const game of byId.values()) {
       const prior = known.get(game.id);
       const ageHours = game.date ? (now - new Date(game.date).getTime()) / 36e5 : 999;
-      if (!prior || ageHours <= refreshRecentHours) queue.push(game);
+      if (!prior || refreshAll || ageHours <= refreshRecentHours) queue.push(game);
       else base.skipped += 1;
     }
 

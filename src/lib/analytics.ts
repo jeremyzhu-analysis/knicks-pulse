@@ -142,7 +142,30 @@ export interface FactorRow {
   current: string;
   previous: string;
   delta: string;
+  shift: number | null;
   tone: "good" | "bad" | "flat" | "none";
+}
+
+export interface PairPlayer {
+  id: string;
+  name: string;
+  minutes: number;
+  net48: number | null;
+}
+
+export interface PairCell {
+  a: string;
+  b: string;
+  minutes: number;
+  net48: number;
+}
+
+export interface PairBoard {
+  id: string;
+  label: string;
+  players: PairPlayer[];
+  cells: PairCell[];
+  note: string;
 }
 
 export interface SeasonView {
@@ -193,6 +216,7 @@ export interface Report {
     factors: string;
     situations: string;
     players: string;
+    pairs: string;
   };
   current: SeasonView | null;
   previous: SeasonView | null;
@@ -200,6 +224,7 @@ export interface Report {
   seasons: SeasonView[];
   factors: FactorRow[];
   players: PlayerRollup[];
+  pairs: PairBoard[];
   latest: LatestView | null;
   champion: { season: string; opponent: string; wins: number; losses: number } | null;
 }
@@ -388,7 +413,7 @@ function impactFor(player: Omit<PlayerRollup, "impact">): PlayerRollup["impact"]
     return {
       kind: "limited",
       title: "Low minutes",
-      sentence: `${who} has ${player.minutes.toFixed(0)} minutes across ${player.games} ${player.games === 1 ? "game" : "games"}, too few to separate a role from noise.`,
+      sentence: `${who}: ${player.minutes.toFixed(0)} min, ${player.games} ${player.games === 1 ? "game" : "games"}.`,
     };
   }
   const per36 = (value: number) => (value / player.minutes) * 36;
@@ -418,57 +443,23 @@ function impactFor(player: Omit<PlayerRollup, "impact">): PlayerRollup["impact"]
   }
   candidates.sort((a, b) => b.score - a.score);
   const primary = candidates[0] ?? { kind: "mixed", title: "Mixed", score: 0 };
-  const floor = floorClause(player);
-  const defense = defenseClause(player);
-  let lead = `${who}'s impact shows up as ${primary.title.toLowerCase()}.`;
-  if (primary.kind === "scoring") {
-    lead = `${who}'s impact is scoring: ${player.pts.toFixed(1)} points a game on ${pctText(player.ts)} true shooting.`;
-  } else if (primary.kind === "creation") {
-    lead = `${who}'s impact is creation: ${player.ast.toFixed(1)} assists a game against ${player.tov.toFixed(1)} turnovers.`;
-  } else if (primary.kind === "rebounding") {
-    lead = `${who}'s impact is the glass: ${player.reb.toFixed(1)} rebounds a game.`;
-  } else if (primary.kind === "rim") {
-    lead = `${who}'s impact is rim protection: ${player.blk.toFixed(1)} blocks a game.`;
-  } else if (primary.kind === "disruption") {
-    lead = `${who}'s impact is disruption: ${player.stl.toFixed(1)} steals a game.`;
-  } else if (primary.kind === "lift") {
-    lead = `${who}'s impact is the margin while on the floor, not a single counting stat.`;
-  } else if (primary.kind === "drag") {
-    lead = `${who}'s on-court minutes have come with a worse margin than the minutes on the bench.`;
-  } else if (primary.kind === "twoway") {
-    lead = `${who}'s impact is two-way: ${player.pts.toFixed(1)} points with ${player.stl.toFixed(1)} steals and ${player.blk.toFixed(1)} blocks.`;
-  } else {
-    lead = `${who} does not lean on one skill. The line is ${player.pts.toFixed(1)} points, ${player.reb.toFixed(1)} rebounds and ${player.ast.toFixed(1)} assists.`;
-  }
-  return { kind: primary.kind, title: primary.title, sentence: `${lead} ${floor} ${defense}${sample}`.replace(/\s+/g, " ").trim() };
-}
-
-function countLabel(value: number, singular: string): string {
-  const n = Number.isInteger(value) ? String(value) : value.toFixed(1);
-  return `${n} ${value === 1 ? singular : `${singular}s`}`;
+  let lead = `${who}: ${primary.title.toLowerCase()}.`;
+  if (primary.kind === "scoring") lead = `${who}: ${player.pts.toFixed(1)} pts, ${pctText(player.ts)} TS.`;
+  else if (primary.kind === "creation") lead = `${who}: ${player.ast.toFixed(1)} ast, ${player.tov.toFixed(1)} tov.`;
+  else if (primary.kind === "rebounding") lead = `${who}: ${player.reb.toFixed(1)} reb.`;
+  else if (primary.kind === "rim") lead = `${who}: ${player.blk.toFixed(1)} blk.`;
+  else if (primary.kind === "disruption") lead = `${who}: ${player.stl.toFixed(1)} stl.`;
+  else if (primary.kind === "twoway") lead = `${who}: ${player.pts.toFixed(1)} pts, ${player.stl.toFixed(1)} stl, ${player.blk.toFixed(1)} blk.`;
+  else if (primary.kind === "mixed") lead = `${who}: ${player.pts.toFixed(1)} / ${player.reb.toFixed(1)} / ${player.ast.toFixed(1)}.`;
+  const on = player.onNet48 == null ? "" : ` On ${signed(player.onNet48)}`;
+  const off = player.offNet48 == null ? "" : `, off ${signed(player.offNet48)}`;
+  const floor = on ? `${on}${off}.` : "";
+  const defense = player.oppPts48On == null ? "" : ` Opp ${player.oppPts48On.toFixed(1)}/48.`;
+  return { kind: primary.kind, title: primary.title, sentence: `${lead}${floor}${defense}${sample}`.replace(/\s+/g, " ").trim() };
 }
 
 function pctText(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
-}
-
-function floorClause(player: Omit<PlayerRollup, "impact">): string {
-  const who = lastName(player.name);
-  if (player.onNet48 == null) return "On-court margin is not stable enough to quote.";
-  const on = `The Knicks' margin is ${signed(player.onNet48)} per 48 minutes with ${who} on the floor`;
-  if (player.offNet48 == null) return `${on}.`;
-  return `${on}, and ${signed(player.offNet48)} when ${who} sits.`;
-}
-
-function defenseClause(player: Omit<PlayerRollup, "impact">): string {
-  const who = lastName(player.name);
-  if (player.oppPts48On == null) return "";
-  const on = `Opponents score ${player.oppPts48On.toFixed(1)} points per 48 minutes in those minutes`;
-  if (player.oppPts48Off == null) return `${on}.`;
-  const gap = player.oppPts48Off - player.oppPts48On;
-  const verdict =
-    gap >= 3 ? " That is a defensive lift." : gap <= -3 ? " That is a defensive cost." : "";
-  return `${on}, against ${player.oppPts48Off.toFixed(1)} with ${who} on the bench.${verdict}`;
 }
 
 function rollPlayers(games: Game[], season: string, phase: Phase): PlayerRollup[] {
@@ -652,6 +643,7 @@ function factorRows(current: Ratings | null, previous: Ratings | null): FactorRo
       current: show(cur),
       previous: show(prev),
       delta: delta == null ? "\u2014" : signed(delta, spec.digits),
+      shift: delta,
       tone: delta == null ? "none" : tone(delta, spec.better),
     };
   });
@@ -693,17 +685,11 @@ function buildHero(current: SeasonView | null, previous: SeasonView | null, cham
   const stories: { score: number; title: string }[] = [
     {
       score: Math.abs(dO),
-      title:
-        dO >= 0
-          ? `The offense is ${signed(dO).replace("+", "")} points per 100 possessions ahead of last season.`
-          : `The offense is ${Math.abs(dO).toFixed(1)} points per 100 possessions behind last season.`,
+      title: dO >= 0 ? `Offense ${dO.toFixed(1)} points ahead` : `Offense ${Math.abs(dO).toFixed(1)} points behind`,
     },
     {
       score: Math.abs(dD),
-      title:
-        dD > 0
-          ? `The defense is allowing ${dD.toFixed(1)} more points per 100 possessions than last season.`
-          : `The defense is allowing ${Math.abs(dD).toFixed(1)} fewer points per 100 possessions than last season.`,
+      title: dD > 0 ? `Defense ${dD.toFixed(1)} points worse` : `Defense ${Math.abs(dD).toFixed(1)} points better`,
     },
   ];
   for (const period of [1, 2, 3, 4]) {
@@ -712,76 +698,59 @@ function buildHero(current: SeasonView | null, previous: SeasonView | null, cham
     if (!now || !then || now.games < 2) continue;
     stories.push({
       score: Math.abs(now.margin - then.margin),
-      title: `The ${now.name} has moved from ${signed(then.margin)} to ${signed(now.margin)}.`,
+      title: `${now.label} ${signed(now.margin)}, was ${signed(then.margin)}`,
     });
   }
   stories.sort((a, b) => b.score - a.score);
   const title =
     stories[0] && stories[0].score >= 1
       ? stories[0].title
-      : `Net rating is ${signed(current.ratings.net)} against ${signed(previous.ratings.net)} last regular season.`;
-  const quarterBits = [1, 2, 3, 4]
-    .map((period) => {
-      const now = current.quarters.find((quarter) => quarter.period === period);
-      const then = previous.quarters.find((quarter) => quarter.period === period);
-      if (!now || !then) return null;
-      return `${now.label} ${signed(now.margin)} (was ${signed(then.margin)})`;
-    })
-    .filter(Boolean)
-    .join("; ");
-  const caveat =
-    current.ratings.games < 20
-      ? ` That rests on ${current.ratings.games} games, so a single night still moves the rates.`
-      : "";
-  const titleNote = champion
-      ? ` Last spring the Knicks won the Finals, ${record(champion.wins, champion.losses)}, over the ${champion.opponent}.`
-    : "";
-  const body = `This regular season the Knicks are ${record(current.ratings.wins, current.ratings.losses)}, with an offensive rating of ${current.ratings.ortg.toFixed(1)} and a defensive rating of ${current.ratings.drtg.toFixed(1)}. Last regular season those figures were ${previous.ratings.ortg.toFixed(1)} and ${previous.ratings.drtg.toFixed(1)}. Net rating has gone from ${signed(previous.ratings.net)} to ${signed(current.ratings.net)}. By quarter: ${quarterBits}.${titleNote}${caveat}`;
-  return { kicker, title, body };
+      : `Net ${signed(current.ratings.net)}, was ${signed(previous.ratings.net)}`;
+  const bits = [
+    current.ratings.games < 20 ? `${current.ratings.games} games. One night still moves the rate.` : `${current.ratings.games} games.`,
+    champion ? `Finals ${record(champion.wins, champion.losses)}, ${champion.opponent}.` : "",
+  ].filter(Boolean);
+  return { kicker, title, body: bits.join(" ") };
 }
 
 function sectionNotes(current: SeasonView | null, previous: SeasonView | null, players: PlayerRollup[]): Report["notes"] {
   const season = !current
-    ? "The season table fills in after the first completed game."
+    ? "Waiting on a completed game."
     : !previous
-      ? `${current.label} is ${record(current.ratings.wins, current.ratings.losses)}, ${signed(current.ratings.margin)} points a game.`
-      : `Compared with ${previous.label} (${record(previous.ratings.wins, previous.ratings.losses)}, net ${signed(previous.ratings.net)}), this season's net rating is ${signed(current.ratings.net)}.`;
+      ? `${record(current.ratings.wins, current.ratings.losses)}, margin ${signed(current.ratings.margin)}.`
+      : `Net ${signed(current.ratings.net)}. Last year ${signed(previous.ratings.net)}.`;
 
-  let quarters = "Quarter margins are points scored minus points allowed in that period.";
+  let quarters = "Margin by period.";
   if (current) {
     const regs = current.quarters.filter((quarter) => quarter.period <= 4);
     const shown = (quarter: { margin: number }) => Math.round(quarter.margin * 10) / 10;
     const best = regs.slice().sort((a, b) => shown(b) - shown(a) || b.won - a.won)[0];
     const worst = regs.slice().sort((a, b) => shown(a) - shown(b) || a.won - b.won)[0];
     if (best && worst) {
-      quarters = `The strongest period so far is the ${best.name} (${signed(best.margin)}, ahead in ${best.won} of ${best.games}). The softest is the ${worst.name} (${signed(worst.margin)}).`;
+      quarters = `Best ${best.label} ${signed(best.margin)}. Softest ${worst.label} ${signed(worst.margin)}.`;
     }
   }
 
-  const factors = "Ratings are points per 100 possessions, estimated from the box score. A lower defensive rating is better. Pace is shown without a better-or-worse mark.";
+  const factors = "Per 100 possessions. Olive helps. Rose hurts. Pace is unmarked.";
 
-  let situations = "Splits need at least a few games before the margin means much.";
+  let situations = "Small samples move fast.";
   if (current) {
     const home = current.situations.find((row) => row.id === "home");
     const road = current.situations.find((row) => row.id === "road");
     const b2b = current.situations.find((row) => row.id === "b2b");
     const bits: string[] = [];
-    if (home && road && home.games >= 2 && road.games >= 2) {
-      bits.push(`Home margin is ${signed(home.margin)} in ${home.games} games; the road is ${signed(road.margin)} in ${road.games}.`);
+    if (home && road && home.games >= 1 && road.games >= 1) {
+      bits.push(`Home ${signed(home.margin)}. Road ${signed(road.margin)}.`);
     }
-    if (b2b && b2b.games >= 2) {
-      bits.push(`On no rest the margin is ${signed(b2b.margin)} across ${b2b.games} back-to-backs.`);
-    }
+    if (b2b && b2b.games >= 1) bits.push(`Back-to-back ${signed(b2b.margin)}.`);
     if (bits.length) situations = bits.join(" ");
   }
 
   const currentPlayers = players.filter((player) => current && player.season === current.season && player.phase === current.phase && player.impact.kind !== "limited");
   const ranked = currentPlayers.filter((player) => player.onOff != null).sort((a, b) => (b.onOff ?? 0) - (a.onOff ?? 0));
-  const playersNote = ranked[0]
-    ? `${lastName(ranked[0].name)} has the largest on/off split among regulars, ${signed(ranked[0].onOff ?? 0)} points per 48 minutes. ${ranked[0].impact.sentence}`
-    : "Player impact uses minutes, shooting, and the margin while each Knick is on the floor.";
+  const playersNote = ranked[0] ? `${lastName(ranked[0].name)} ${signed(ranked[0].onOff ?? 0)} on/off.` : "On-court margin.";
 
-  return { season, quarters, factors, situations, players: playersNote };
+  return { season, quarters, factors, situations, players: playersNote, pairs: "Both on the floor. Margin per 48." };
 }
 
 function latestView(games: Game[]): LatestView | null {
@@ -800,14 +769,7 @@ function latestView(games: Game[]): LatestView | null {
     .map((player) => ({ ...player, gameScore: gameScore(player) }))
     .sort((a, b) => b.gameScore - a.gameScore);
   const lead = played[0];
-  const verb = game.win ? "beat" : "lost to";
-  const where = game.neutral ? "at a neutral site" : game.home ? "at home" : "on the road";
-  const swingText = swing
-    ? ` The largest quarter margin was ${swing.label} ${signed(swing.margin, 0)} (${swing.knicks}\u2013${swing.opponent}).`
-    : "";
-  const leadText = lead
-    ? ` ${lastName(lead.name)} led the Knicks in game score with ${countLabel(lead.pts, "point")}, ${countLabel(lead.reb, "rebound")}, ${countLabel(lead.ast, "assist")} and a ${signed(lead.plusMinus, 0)} plus-minus.`
-    : "";
+  const where = game.neutral ? "neutral" : game.home ? "home" : "road";
   return {
     id: game.id,
     date: game.date,
@@ -821,7 +783,7 @@ function latestView(games: Game[]): LatestView | null {
     venue: game.venue,
     series: game.series,
     quarters,
-    note: `The Knicks ${verb} the ${game.opponentName} ${game.knicksScore}\u2013${game.opponentScore} ${where}.${swingText}${leadText}`,
+    note: `${where[0]?.toUpperCase()}${where.slice(1)} ${game.win ? "win" : "loss"}.${swing ? ` ${swing.label} ${signed(swing.margin, 0)}.` : ""}${lead ? ` ${lastName(lead.name)} ${lead.pts} pts.` : ""}`,
     players: played.slice(0, 5).map((player) => ({
       id: player.id,
       name: player.name,
@@ -836,6 +798,65 @@ function latestView(games: Game[]): LatestView | null {
   };
 }
 
+function pairBoards(games: Game[], seasons: SeasonView[], players: PlayerRollup[]): PairBoard[] {
+  const minimum = 8 * 60;
+  return seasons
+    .filter((season) => season.ratings.games > 0)
+    .map((season) => {
+      const slice = games.filter(
+        (game) => game.season === season.season && game.phase === season.phase && game.lineupError <= 8,
+      );
+      const totals = new Map<string, { seconds: number; pts: number; opp: number }>();
+      for (const game of slice) {
+        for (const pair of game.pairs ?? []) {
+          const a = pair.a < pair.b ? pair.a : pair.b;
+          const b = pair.a < pair.b ? pair.b : pair.a;
+          const key = `${a}:${b}`;
+          const row = totals.get(key) ?? { seconds: 0, pts: 0, opp: 0 };
+          row.seconds += pair.seconds;
+          row.pts += pair.pts;
+          row.opp += pair.opp;
+          totals.set(key, row);
+        }
+      }
+      const shown = players
+        .filter((player) => player.season === season.season && player.phase === season.phase && player.minutes >= 20)
+        .slice(0, 8);
+      const ids = new Set(shown.map((player) => player.id));
+      const cells: PairCell[] = [];
+      for (const [key, row] of totals) {
+        if (row.seconds < minimum) continue;
+        const [a, b] = key.split(":");
+        if (!a || !b || !ids.has(a) || !ids.has(b)) continue;
+        cells.push({ a, b, minutes: row.seconds / 60, net48: ((row.pts - row.opp) / row.seconds) * 48 * 60 });
+      }
+      const named = (id: string) => lastName(shown.find((player) => player.id === id)?.name ?? id);
+      const ranked = cells.slice().sort((a, b) => b.net48 - a.net48);
+      const best = ranked[0];
+      const soft = ranked.length > 1 ? ranked[ranked.length - 1] : undefined;
+      const note =
+        cells.length === 0
+          ? "Pair minutes are still loading."
+          : best && soft
+            ? `Best ${named(best.a)}–${named(best.b)} ${signed(best.net48)}. Softest ${named(soft.a)}–${named(soft.b)} ${signed(soft.net48)}.`
+            : best
+              ? `${named(best.a)}–${named(best.b)} ${signed(best.net48)}.`
+              : "Both on the floor. Margin per 48.";
+      return {
+        id: `${season.season}:${season.phase}`,
+        label: season.label,
+        players: shown.map((player) => ({
+          id: player.id,
+          name: lastName(player.name),
+          minutes: player.minutes,
+          net48: player.onNet48,
+        })),
+        cells,
+        note,
+      };
+    });
+}
+
 export function buildReport(store: Store): Report {
   const games = store.games.slice().sort((a, b) => a.date.localeCompare(b.date));
   const keys = new Map<string, { season: string; phase: Phase }>();
@@ -848,19 +869,24 @@ export function buildReport(store: Store): Report {
   const previous = regulars.length > 1 ? regulars[regulars.length - 2] : null;
   const playoffs = seasons.filter((season) => season.phase === "playoffs" && previous && season.season === previous.season).at(-1) ?? seasons.filter((season) => season.phase === "playoffs").at(-1) ?? null;
   const players = seasons.flatMap((season) => rollPlayers(games, season.season, season.phase));
+  const pairs = pairBoards(games, seasons, players);
   const champion = championOf(games);
+  const notes = sectionNotes(current, previous, players);
+  const currentPairs = pairs.find((board) => current && board.id === `${current.season}:${current.phase}`);
+  if (currentPairs && currentPairs.cells.length > 0) notes.pairs = currentPairs.note;
   return {
     updatedAt: store.updatedAt,
     checkedAt: store.checkedAt,
     gameCount: games.length,
     hero: buildHero(current, previous, champion),
-    notes: sectionNotes(current, previous, players),
+    notes,
     current,
     previous,
     playoffs,
     seasons,
     factors: factorRows(current?.ratings ?? null, previous?.ratings ?? null),
     players,
+    pairs,
     latest: latestView(games),
     champion,
   };

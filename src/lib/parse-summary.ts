@@ -199,7 +199,7 @@ function replayPlays(
   plays: unknown[],
   listed: ListedPlayer[],
   knicksHome: boolean,
-): { lineupError: number; flow: Game["flow"] } {
+): { lineupError: number; flow: Game["flow"]; pairs: Game["pairs"] } {
   const byId = new Map(listed.map((row) => [row.game.id, row]));
   const lineup = new Map<string, Set<string>>();
   for (const row of listed) {
@@ -230,6 +230,32 @@ function replayPlays(
   const flow: Game["flow"] = [];
 
   const knicksOnFloor = () => lineup.get(KNICKS_TEAM_ID) ?? new Set<string>();
+  const pairs = new Map<string, { a: string; b: string; seconds: number; pts: number; opp: number }>();
+
+  const knicksFive = (): string[] | null => {
+    const ids = [...knicksOnFloor()].filter((id) => byId.get(id)?.teamId === KNICKS_TEAM_ID);
+    if (ids.length !== 5) return null;
+    ids.sort();
+    return ids;
+  };
+
+  const eachPair = (apply: (row: { a: string; b: string; seconds: number; pts: number; opp: number }) => void) => {
+    const ids = knicksFive();
+    if (!ids) return;
+    for (let i = 0; i < ids.length; i += 1) {
+      for (let j = i + 1; j < ids.length; j += 1) {
+        const a = ids[i];
+        const b = ids[j];
+        const key = `${a}:${b}`;
+        let row = pairs.get(key);
+        if (!row) {
+          row = { a, b, seconds: 0, pts: 0, opp: 0 };
+          pairs.set(key, row);
+        }
+        apply(row);
+      }
+    }
+  };
 
   const creditSeconds = (seconds: number, atPeriod: number) => {
     if (seconds <= 0 || seconds > periodLength(atPeriod) + 2) return;
@@ -239,6 +265,9 @@ function replayPlays(
       const player = byId.get(id);
       if (player && player.teamId === KNICKS_TEAM_ID) player.game.onSeconds += seconds;
     }
+    eachPair((row) => {
+      row.seconds += seconds;
+    });
   };
 
   const advanceClock = (nextPeriod: number, nextClock: number) => {
@@ -267,6 +296,10 @@ function replayPlays(
         player.game.onOpp += oDelta;
       }
     }
+    eachPair((row) => {
+      row.pts += kDelta;
+      row.opp += oDelta;
+    });
   };
 
   for (const play of ordered) {
@@ -375,7 +408,8 @@ function replayPlays(
       : [];
   }
 
-  return { lineupError, flow };
+  const pairRows = [...pairs.values()].filter((row) => row.seconds > 0);
+  return { lineupError, flow, pairs: pairRows };
 }
 
 export function parseSummary(raw: unknown, meta: GameMeta): Game {
@@ -412,7 +446,7 @@ export function parseSummary(raw: unknown, meta: GameMeta): Game {
   const oppTeam = teamRows.find((item) => str(rec(item.team).id) !== KNICKS_TEAM_ID);
 
   const listed = parseListedPlayers(boxscore);
-  const { lineupError, flow } = replayPlays(arr(root.plays), listed, knicksHome);
+  const { lineupError, flow, pairs } = replayPlays(arr(root.plays), listed, knicksHome);
 
   const info = rec(root.gameInfo);
   const venue = rec(info.venue);
@@ -447,5 +481,6 @@ export function parseSummary(raw: unknown, meta: GameMeta): Game {
     opponentPlayers,
     flow,
     lineupError,
+    pairs,
   };
 }

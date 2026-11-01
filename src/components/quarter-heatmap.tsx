@@ -2,22 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { heatStyle } from "@/components/heat";
 import type { GameStub } from "@/lib/analytics";
 import { etDate, signed } from "@/lib/format";
-
-function mix(from: string, to: string, amount: number): string {
-  const parse = (hex: string) => [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16));
-  const a = parse(from);
-  const b = parse(to);
-  const channels = a.map((channel, index) => Math.round(channel + (b[index] - channel) * amount));
-  return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
-}
-
-function heat(margin: number): { background: string; color: string } {
-  const t = Math.max(-1, Math.min(1, margin / 16));
-  const background = t >= 0 ? mix("#141414", "#e07a3d", t) : mix("#141414", "#7eadd4", -t);
-  return { background, color: Math.abs(t) > 0.55 ? "#140e0a" : "#f4f1ea" };
-}
 
 export function QuarterHeatmap({
   views,
@@ -82,10 +69,10 @@ export function QuarterHeatmap({
                       </td>
                     );
                   }
-                  const tone = heat(quarter.margin);
+                  const tone = heatStyle(quarter.margin);
                   return (
                     <td key={period} className="p-0.5">
-                      <div className="tabular px-1 py-1 text-center text-[12px]" style={tone}>
+                      <div className="tabular flex h-9 min-w-12 items-center justify-center text-[13px] font-bold" style={tone}>
                         {signed(quarter.margin, 0)}
                       </div>
                     </td>
@@ -96,10 +83,14 @@ export function QuarterHeatmap({
           </tbody>
         </table>
       </div>
-      <p className="mt-3 text-[12px] text-muted">
-        Each cell is the Knicks&apos; point margin in that quarter. Orange means the Knicks outscored the opponent. Blue
-        means they were outscored. Newest game at the top.
-      </p>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[12px] text-muted">
+        <p>Newest on top. Orange ahead, blue behind.</p>
+        <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.12em]">
+          <span>−16</span>
+          <span className="h-2 w-24" style={{ background: "linear-gradient(90deg, #7eadd4, #141414, #e07a3d)" }} />
+          <span>+16</span>
+        </div>
+      </div>
     </div>
   );
 }
