@@ -27,15 +27,18 @@ fn period_seconds(period: i32) -> f64 {
 /// Plays where a listed player may not be on the floor.
 fn off_floor_play(type_text: &str) -> bool {
     let text = type_text.to_lowercase();
-    ["technical", "ejection", "timeout", "jumpball", "jump ball"].iter().any(|w| text.contains(w))
+    ["technical", "ejection", "timeout", "jumpball", "jump ball"]
+        .iter()
+        .any(|w| text.contains(w))
 }
 
-/// Ids are truthy in the original: 0 and missing both mean "no player".
+/// 0 and a missing id both mean "no player".
 fn player(id: Option<u32>) -> Option<u32> {
     id.filter(|&id| id != 0)
 }
 
-/// Players on the floor in the order they came on, like a JavaScript Set.
+/// Players on the floor in the order they came on; that order decides who
+/// fills the next period's five when substitutions don't say.
 #[derive(Default)]
 struct Floor(Vec<u32>);
 
@@ -79,7 +82,12 @@ impl Lineups {
         if let Some(&i) = self.index.get(&players) {
             return i;
         }
-        self.list.push(LineupTotals { players: players.clone(), seconds: 0.0, pts_for: 0, pts_against: 0 });
+        self.list.push(LineupTotals {
+            players: players.clone(),
+            seconds: 0.0,
+            pts_for: 0,
+            pts_against: 0,
+        });
         self.index.insert(players, self.list.len() - 1);
         self.list.len() - 1
     }
@@ -93,7 +101,12 @@ pub fn replay_game(game: &Game) -> Replay {
     let roster: HashSet<u32> = game.players.iter().map(|p| p.player_id).collect();
     let mut lineups = Lineups::default();
     let mut ok = true;
-    let mut previous_end: Vec<u32> = game.players.iter().filter(|p| p.starter).map(|p| p.player_id).collect();
+    let mut previous_end: Vec<u32> = game
+        .players
+        .iter()
+        .filter(|p| p.starter)
+        .map(|p| p.player_id)
+        .collect();
     let mut last_home = 0;
     let mut last_away = 0;
 
@@ -122,7 +135,8 @@ pub fn replay_game(game: &Game) -> Replay {
             last_away = play.away_score;
 
             let (entering, leaving) = (player(play.players[0]), player(play.players[1]));
-            if let (true, Some(entering), Some(leaving)) = (play.type_text == "Substitution", entering, leaving)
+            if let (true, Some(entering), Some(leaving)) =
+                (play.type_text == "Substitution", entering, leaving)
                 && roster.contains(&entering)
             {
                 if !on_floor.delete(leaving) || on_floor.has(entering) {
@@ -146,11 +160,16 @@ pub fn replay_game(game: &Game) -> Replay {
         }
     }
     for p in &game.players {
-        if (replayed.get(&p.player_id).copied().unwrap_or(0) - p.plus_minus).abs() > REPLAY_TOLERANCE {
+        if (replayed.get(&p.player_id).copied().unwrap_or(0) - p.plus_minus).abs()
+            > REPLAY_TOLERANCE
+        {
             ok = false;
         }
     }
-    Replay { ok, lineups: lineups.list }
+    Replay {
+        ok,
+        lineups: lineups.list,
+    }
 }
 
 fn period_starters(plays: &[&PlayRow], roster: &HashSet<u32>, previous_end: &[u32]) -> Vec<u32> {
@@ -161,7 +180,11 @@ fn period_starters(plays: &[&PlayRow], roster: &HashSet<u32>, previous_end: &[u3
             break;
         }
         if play.type_text == "Substitution" {
-            let (Some(entering), Some(leaving)) = (player(play.players[0]), player(play.players[1])) else { continue };
+            let (Some(entering), Some(leaving)) =
+                (player(play.players[0]), player(play.players[1]))
+            else {
+                continue;
+            };
             if !roster.contains(&entering) {
                 continue;
             }

@@ -22,12 +22,16 @@ pub async fn sync_games(pool: &MySqlPool, espn: &Espn, log: impl Fn(&str)) -> Re
     let schedules = [
         current,
         espn.schedule(TEAM_SLUG, Some(year), PLAYOFFS).await?,
-        espn.schedule(TEAM_SLUG, Some(year - 1), REGULAR_SEASON).await?,
+        espn.schedule(TEAM_SLUG, Some(year - 1), REGULAR_SEASON)
+            .await?,
         espn.schedule(TEAM_SLUG, Some(year - 1), PLAYOFFS).await?,
     ];
     let mut seen = HashSet::new();
-    let ids: Vec<String> =
-        schedules.into_iter().flat_map(|s| s.completed_game_ids).filter(|id| seen.insert(id.clone())).collect();
+    let ids: Vec<String> = schedules
+        .into_iter()
+        .flat_map(|s| s.completed_game_ids)
+        .filter(|id| seen.insert(id.clone()))
+        .collect();
 
     let stored: HashSet<String> = sqlx::query_scalar::<_, u64>("SELECT id FROM games")
         .fetch_all(pool)
@@ -36,7 +40,11 @@ pub async fn sync_games(pool: &MySqlPool, espn: &Espn, log: impl Fn(&str)) -> Re
         .map(|id| id.to_string())
         .collect();
     let missing: Vec<&String> = ids.iter().filter(|id| !stored.contains(*id)).collect();
-    log(&format!("{} completed games, {} to fetch.", ids.len(), missing.len()));
+    log(&format!(
+        "{} completed games, {} to fetch.",
+        ids.len(),
+        missing.len()
+    ));
 
     let mut added = 0;
     for id in missing {
@@ -44,7 +52,11 @@ pub async fn sync_games(pool: &MySqlPool, espn: &Espn, log: impl Fn(&str)) -> Re
             Ok(game) => game,
             // ESPN lists some finished games whose summary answers 404. Skipping
             // leaves them unstored, so every later sync asks for them again.
-            Err(error) if error.downcast_ref::<EspnHttpError>().is_some_and(|e| e.status == 404) => {
+            Err(error)
+                if error
+                    .downcast_ref::<EspnHttpError>()
+                    .is_some_and(|e| e.status == 404) =>
+            {
                 log(&format!("Skipped game {id}: ESPN has no summary for it."));
                 continue;
             }
@@ -64,7 +76,10 @@ pub async fn sync_games(pool: &MySqlPool, espn: &Espn, log: impl Fn(&str)) -> Re
             game.home_score
         ));
     }
-    Ok(SyncResult { completed: ids.len(), added })
+    Ok(SyncResult {
+        completed: ids.len(),
+        added,
+    })
 }
 
 /// One transaction per game; a failure leaves nothing of the game behind.
@@ -86,13 +101,26 @@ async fn store_game(pool: &MySqlPool, game: &GameSummary) -> Result<()> {
     if !game.player_boxes.is_empty() {
         let mut q = QueryBuilder::<MySql>::new("INSERT INTO players (id, full_name, position) ");
         q.push_values(&game.player_boxes, |mut row, p| {
-            row.push_bind(p.player_id).push_bind(&p.full_name).push_bind(&p.position);
+            row.push_bind(p.player_id)
+                .push_bind(&p.full_name)
+                .push_bind(&p.position);
         });
-        q.push(" ON DUPLICATE KEY UPDATE full_name = VALUES(full_name), position = VALUES(position)");
+        q.push(
+            " ON DUPLICATE KEY UPDATE full_name = VALUES(full_name), position = VALUES(position)",
+        );
         q.build().execute(&mut *tx).await?;
     }
-    sqlx::query("DELETE FROM games WHERE id = ?").bind(game_id).execute(&mut *tx).await?;
-    let period_count = game.periods.iter().map(|p| p.period).max().unwrap_or(0).max(4);
+    sqlx::query("DELETE FROM games WHERE id = ?")
+        .bind(game_id)
+        .execute(&mut *tx)
+        .await?;
+    let period_count = game
+        .periods
+        .iter()
+        .map(|p| p.period)
+        .max()
+        .unwrap_or(0)
+        .max(4);
     sqlx::query(
         "INSERT INTO games (id, season_year, season_type, starts_at, home_team_id, away_team_id, home_score, away_score, periods, venue, note, synced_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())",
@@ -123,9 +151,17 @@ async fn store_game(pool: &MySqlPool, game: &GameSummary) -> Result<()> {
         },
     )
     .await?;
-    insert(&mut tx, "game_periods (game_id, team_id, period, pts)", &game.periods, |mut row, p| {
-        row.push_bind(game_id).push_bind(p.team_id).push_bind(p.period).push_bind(p.pts);
-    })
+    insert(
+        &mut tx,
+        "game_periods (game_id, team_id, period, pts)",
+        &game.periods,
+        |mut row, p| {
+            row.push_bind(game_id)
+                .push_bind(p.team_id)
+                .push_bind(p.period)
+                .push_bind(p.pts);
+        },
+    )
     .await?;
     insert(
         &mut tx,

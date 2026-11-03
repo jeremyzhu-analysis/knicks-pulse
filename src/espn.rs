@@ -1,7 +1,6 @@
 //! Client for ESPN's public site API (no key, undocumented). Only the fields
 //! this site stores are read. Numbers arrive as strings and may be missing;
-//! they are parsed like JavaScript's `parseInt`, so a missing or malformed
-//! value counts as 0, as it did in the Node version.
+//! `int` reads them leniently, so a missing or malformed value counts as 0.
 
 use std::fmt;
 use std::time::Duration;
@@ -36,26 +35,40 @@ pub struct Espn {
 
 impl Espn {
     /// Trusts Mozilla's root certificates bundled at build time, not the macOS
-    /// keychain, the same as Node's built-in fetch. The macOS check runs in
-    /// trustd, which sandboxed processes can't reach.
+    /// keychain: the macOS check runs in trustd, which sandboxed processes
+    /// (such as an agent's shell) can't reach.
     pub fn new() -> Result<Self> {
         let roots = webpki_root_certs::TLS_SERVER_ROOT_CERTS
             .iter()
             .map(|der| reqwest::Certificate::from_der(der))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(Self { http: reqwest::Client::builder().tls_certs_only(roots).build()? })
+        Ok(Self {
+            http: reqwest::Client::builder().tls_certs_only(roots).build()?,
+        })
     }
 
     /// Up to 3 attempts; only 5xx answers are retried, after 1 s and then 2 s.
     async fn get_json<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
         for attempt in 1u64.. {
-            let res = self.http.get(url).header(reqwest::header::ACCEPT, "application/json").send().await?;
+            let res = self
+                .http
+                .get(url)
+                .header(reqwest::header::ACCEPT, "application/json")
+                .send()
+                .await?;
             let status = res.status().as_u16();
             if res.status().is_success() {
-                return res.json::<T>().await.with_context(|| format!("parsing {url}"));
+                return res
+                    .json::<T>()
+                    .await
+                    .with_context(|| format!("parsing {url}"));
             }
             if attempt >= 3 || status < 500 {
-                return Err(EspnHttpError { status, url: url.to_string() }.into());
+                return Err(EspnHttpError {
+                    status,
+                    url: url.to_string(),
+                }
+                .into());
             }
             tokio::time::sleep(Duration::from_millis(1000 * attempt)).await;
         }
@@ -63,7 +76,12 @@ impl Espn {
     }
 
     /// Without a season ESPN answers with the current one.
-    pub async fn schedule(&self, team_slug: &str, season_year: Option<i32>, season_type: u8) -> Result<Schedule> {
+    pub async fn schedule(
+        &self,
+        team_slug: &str,
+        season_year: Option<i32>,
+        season_type: u8,
+    ) -> Result<Schedule> {
         let mut url = format!("{BASE}/teams/{team_slug}/schedule?seasontype={season_type}");
         if let Some(year) = season_year {
             url.push_str(&format!("&season={year}"));
@@ -71,23 +89,39 @@ impl Espn {
         let json: ScheduleJson = self.get_json(&url).await?;
         // A season type that hasn't started (playoffs during the regular season)
         // comes back without requestedSeason and with no events.
-        let year = json.requested_season.and_then(|s| s.year).or(season_year).filter(|&y| y != 0);
+        let year = json
+            .requested_season
+            .and_then(|s| s.year)
+            .or(season_year)
+            .filter(|&y| y != 0);
         let season_year = year.ok_or_else(|| anyhow!("ESPN schedule has no requestedSeason"))?;
         let completed_game_ids = json
             .events
             .unwrap_or_default()
             .into_iter()
             .filter(|event| {
-                let status = event.competitions.as_ref().and_then(|c| c.first()).and_then(|c| c.status.as_ref());
-                status.and_then(|s| s.r#type.as_ref()).and_then(|t| t.completed) == Some(true)
+                let status = event
+                    .competitions
+                    .as_ref()
+                    .and_then(|c| c.first())
+                    .and_then(|c| c.status.as_ref());
+                status
+                    .and_then(|s| s.r#type.as_ref())
+                    .and_then(|t| t.completed)
+                    == Some(true)
             })
             .map(|event| event.id)
             .collect();
-        Ok(Schedule { season_year, completed_game_ids })
+        Ok(Schedule {
+            season_year,
+            completed_game_ids,
+        })
     }
 
     pub async fn game_summary(&self, game_id: &str) -> Result<GameSummary> {
-        let json: SummaryJson = self.get_json(&format!("{BASE}/summary?event={game_id}")).await?;
+        let json: SummaryJson = self
+            .get_json(&format!("{BASE}/summary?event={game_id}"))
+            .await?;
         parse_summary(game_id, json)
     }
 }
@@ -184,8 +218,12 @@ pub struct GameSummary {
 }
 
 fn parse_summary(game_id: &str, json: SummaryJson) -> Result<GameSummary> {
-    let competition =
-        json.header.competitions.into_iter().next().ok_or_else(|| anyhow!("Game {game_id} has no competition"))?;
+    let competition = json
+        .header
+        .competitions
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!("Game {game_id} has no competition"))?;
     let side = |name: &str| competition.competitors.iter().find(|c| c.home_away == name);
     let (Some(home), Some(away)) = (side("home"), side("away")) else {
         return Err(anyhow!("Game {game_id} is missing a team"));
@@ -203,13 +241,22 @@ fn parse_summary(game_id: &str, json: SummaryJson) -> Result<GameSummary> {
         .iter()
         .map(|t| {
             let stat = |name: &str| {
-                t.statistics.iter().find(|s| s.name.as_deref() == Some(name)).and_then(|s| s.display_value.as_deref())
+                t.statistics
+                    .iter()
+                    .find(|s| s.name.as_deref() == Some(name))
+                    .and_then(|s| s.display_value.as_deref())
             };
             let (fgm, fga) = made_attempted(stat("fieldGoalsMade-fieldGoalsAttempted"));
-            let (fg3m, fg3a) = made_attempted(stat("threePointFieldGoalsMade-threePointFieldGoalsAttempted"));
+            let (fg3m, fg3a) = made_attempted(stat(
+                "threePointFieldGoalsMade-threePointFieldGoalsAttempted",
+            ));
             let (ftm, fta) = made_attempted(stat("freeThrowsMade-freeThrowsAttempted"));
             let team_id = int(t.team.id.as_deref());
-            let score = if team_id == int(home.id.as_deref()) { &home.score } else { &away.score };
+            let score = if team_id == int(home.id.as_deref()) {
+                &home.score
+            } else {
+                &away.score
+            };
             TeamBox {
                 team_id,
                 pts: int(score.as_deref()),
@@ -234,27 +281,42 @@ fn parse_summary(game_id: &str, json: SummaryJson) -> Result<GameSummary> {
 
     let mut player_boxes = Vec::new();
     for side in json.boxscore.players.iter().flatten() {
-        let Some(group) = side.statistics.first() else { continue };
+        let Some(group) = side.statistics.first() else {
+            continue;
+        };
         for a in &group.athletes {
             // Players who didn't play can come without an id or a name.
             if a.did_not_play == Some(true) {
                 continue;
             }
-            let missing = |field: &str| anyhow!("Game {game_id}: a player who played has no {field}");
+            let missing =
+                |field: &str| anyhow!("Game {game_id}: a player who played has no {field}");
             let stats = a.stats.as_ref().ok_or_else(|| missing("stats"))?;
             if stats.is_empty() {
                 continue;
             }
             let athlete = a.athlete.as_ref().ok_or_else(|| missing("athlete"))?;
             let names = group.names.as_ref().ok_or_else(|| missing("stat names"))?;
-            let col = |name: &str| names.iter().position(|n| n == name).and_then(|i| stats.get(i)).map(String::as_str);
+            let col = |name: &str| {
+                names
+                    .iter()
+                    .position(|n| n == name)
+                    .and_then(|i| stats.get(i))
+                    .map(String::as_str)
+            };
             let (fgm, fga) = made_attempted(col("FG"));
             let (fg3m, fg3a) = made_attempted(col("3PT"));
             let (ftm, fta) = made_attempted(col("FT"));
             player_boxes.push(PlayerBox {
                 player_id: int(athlete.id.as_deref()),
-                full_name: athlete.display_name.clone().ok_or_else(|| missing("displayName"))?,
-                position: athlete.position.as_ref().and_then(|p| p.abbreviation.clone()),
+                full_name: athlete
+                    .display_name
+                    .clone()
+                    .ok_or_else(|| missing("displayName"))?,
+                position: athlete
+                    .position
+                    .as_ref()
+                    .and_then(|p| p.abbreviation.clone()),
                 team_id: int(side.team.id.as_deref()),
                 starter: a.starter.ok_or_else(|| missing("starter"))?,
                 minutes: int(col("MIN")),
@@ -281,11 +343,15 @@ fn parse_summary(game_id: &str, json: SummaryJson) -> Result<GameSummary> {
         .into_iter()
         .flat_map(|c| {
             let team_id = int(c.team.id.as_deref());
-            c.linescores.iter().flatten().enumerate().map(move |(i, l)| Period {
-                team_id,
-                period: i as i64 + 1,
-                pts: int(l.display_value.as_deref()),
-            })
+            c.linescores
+                .iter()
+                .flatten()
+                .enumerate()
+                .map(move |(i, l)| Period {
+                    team_id,
+                    period: i as i64 + 1,
+                    pts: int(l.display_value.as_deref()),
+                })
         })
         .collect();
 
@@ -295,7 +361,11 @@ fn parse_summary(game_id: &str, json: SummaryJson) -> Result<GameSummary> {
         .into_iter()
         .map(|p| {
             let participant = |i: usize| {
-                let id = p.participants.as_ref().and_then(|list| list.get(i)).and_then(|x| x.athlete.id.as_deref());
+                let id = p
+                    .participants
+                    .as_ref()
+                    .and_then(|list| list.get(i))
+                    .and_then(|x| x.athlete.id.as_deref());
                 id.filter(|id| !id.is_empty()).map(|id| int(Some(id)))
             };
             Play {
@@ -322,7 +392,10 @@ fn parse_summary(game_id: &str, json: SummaryJson) -> Result<GameSummary> {
         home_score: int(home.score.as_deref()),
         away_score: int(away.score.as_deref()),
         periods,
-        venue: json.game_info.and_then(|g| g.venue).and_then(|v| v.full_name),
+        venue: json
+            .game_info
+            .and_then(|g| g.venue)
+            .and_then(|v| v.full_name),
         note: json.header.game_note,
         team_boxes,
         player_boxes,
@@ -332,7 +405,9 @@ fn parse_summary(game_id: &str, json: SummaryJson) -> Result<GameSummary> {
 
 /// ESPN's dates often have no seconds: "2026-11-03T00:30Z".
 fn parse_espn_date(value: &str) -> Result<Timestamp> {
-    value.parse().with_context(|| format!("ESPN date {value:?}"))
+    value
+        .parse()
+        .with_context(|| format!("ESPN date {value:?}"))
 }
 
 /// Like JavaScript `parseInt(value, 10)`: leading whitespace, an optional sign,
@@ -358,7 +433,10 @@ fn number(value: &str) -> f64 {
     if text.is_empty() {
         return 0.0;
     }
-    text.parse::<f64>().ok().filter(|n| n.is_finite()).unwrap_or(0.0)
+    text.parse::<f64>()
+        .ok()
+        .filter(|n| n.is_finite())
+        .unwrap_or(0.0)
 }
 
 /// "37-75" -> (37, 75)
@@ -625,7 +703,10 @@ mod tests {
     fn parses_espn_dates_without_seconds() {
         let ts = parse_espn_date("2026-11-03T00:30Z").unwrap();
         assert_eq!(ts.to_string(), "2026-11-03T00:30:00Z");
-        assert_eq!(parse_espn_date("2026-11-03T00:30:15Z").unwrap().to_string(), "2026-11-03T00:30:15Z");
+        assert_eq!(
+            parse_espn_date("2026-11-03T00:30:15Z").unwrap().to_string(),
+            "2026-11-03T00:30:15Z"
+        );
     }
 
     #[test]
@@ -651,7 +732,18 @@ mod tests {
         let game = parse_summary("1", serde_json::from_str(json).unwrap()).unwrap();
         assert_eq!(game.player_boxes.len(), 1);
         let p = &game.player_boxes[0];
-        assert_eq!((p.player_id, p.full_name.as_str(), p.minutes, p.pts, p.fgm, p.fga, p.plus_minus), (1, "Jalen Brunson", 36, 31, 11, 22, 5));
+        assert_eq!(
+            (
+                p.player_id,
+                p.full_name.as_str(),
+                p.minutes,
+                p.pts,
+                p.fgm,
+                p.fga,
+                p.plus_minus
+            ),
+            (1, "Jalen Brunson", 36, 31, 11, 22, 5)
+        );
         assert_eq!((game.team_boxes[0].pts, game.team_boxes[0].fga), (108, 85));
         assert_eq!(game.periods.len(), 1);
         assert!(game.plays.is_empty() && game.venue.is_none() && game.note.is_none());

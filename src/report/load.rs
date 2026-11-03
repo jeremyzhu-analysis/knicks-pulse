@@ -187,7 +187,9 @@ fn group_by<T>(rows: Vec<T>, key: impl Fn(&T) -> u64) -> HashMap<u64, Vec<T>> {
 }
 
 fn parse_utc(value: &str) -> Result<Timestamp> {
-    value.parse().with_context(|| format!("stored DATETIME {value:?}"))
+    value
+        .parse()
+        .with_context(|| format!("stored DATETIME {value:?}"))
 }
 
 pub async fn load_dataset(pool: &MySqlPool, team_id: u32) -> Result<Dataset> {
@@ -201,12 +203,16 @@ pub async fn load_dataset(pool: &MySqlPool, team_id: u32) -> Result<Dataset> {
     .fetch_all(pool)
     .await?;
     if game_rows.is_empty() {
-        return Ok(Dataset { games: Vec::new(), synced_at: None });
+        return Ok(Dataset {
+            games: Vec::new(),
+            synced_at: None,
+        });
     }
 
     // The same games as above, so these queries never need an id list.
     const TEAM_GAMES: &str = "(SELECT id FROM games WHERE home_team_id = ? OR away_team_id = ?)";
-    let teams = sqlx::query_as::<_, TeamDb>("SELECT id, abbreviation, display_name FROM teams").fetch_all(pool);
+    let teams = sqlx::query_as::<_, TeamDb>("SELECT id, abbreviation, display_name FROM teams")
+        .fetch_all(pool);
     let stats = sqlx::query_as::<_, TeamStatsDb>(sqlx::AssertSqlSafe(format!(
         "SELECT game_id, team_id, fgm, fga, fg3m, fta, oreb, dreb, tov, paint_pts, fast_break_pts, pts_off_tov
            FROM game_team_stats WHERE game_id IN {TEAM_GAMES}"
@@ -221,7 +227,7 @@ pub async fn load_dataset(pool: &MySqlPool, team_id: u32) -> Result<Dataset> {
     .bind(team_id)
     .fetch_all(pool);
     // Player order decides ties later (sorting by minutes, the top scorer), so
-    // it is fixed here: the order the Node version got from MySQL's index.
+    // the query fixes it instead of leaving it to the query plan.
     let players = sqlx::query_as::<_, PlayerDb>(sqlx::AssertSqlSafe(format!(
         "SELECT gp.game_id, gp.player_id, p.full_name, p.position, gp.starter, gp.minutes,
                 gp.pts, gp.fga, gp.fta, gp.oreb, gp.dreb, gp.ast, gp.stl, gp.blk, gp.tov, gp.plus_minus
@@ -233,8 +239,8 @@ pub async fn load_dataset(pool: &MySqlPool, team_id: u32) -> Result<Dataset> {
     .bind(team_id)
     .bind(team_id)
     .fetch_all(pool);
-    // clock_s is DECIMAL; reading it as text and parsing gives the same double
-    // as JavaScript's Number() did.
+    // clock_s is DECIMAL; reading it as text and parsing it gives the nearest
+    // double without a decimal crate.
     let plays = sqlx::query_as::<_, PlayDb>(sqlx::AssertSqlSafe(format!(
         "SELECT game_id, period, CAST(clock_s AS CHAR) clock_s, type_text, home_score, away_score,
                 player1_id, player2_id, player3_id
@@ -243,7 +249,8 @@ pub async fn load_dataset(pool: &MySqlPool, team_id: u32) -> Result<Dataset> {
     .bind(team_id)
     .bind(team_id)
     .fetch_all(pool);
-    let (teams, stats, periods, players, plays) = tokio::try_join!(teams, stats, periods, players, plays)?;
+    let (teams, stats, periods, players, plays) =
+        tokio::try_join!(teams, stats, periods, players, plays)?;
 
     let team_by_id: HashMap<u32, TeamDb> = teams.into_iter().map(|t| (t.id, t)).collect();
     let stats_by_game = group_by(stats, |r| r.game_id);
@@ -261,11 +268,21 @@ pub async fn load_dataset(pool: &MySqlPool, team_id: u32) -> Result<Dataset> {
         let home = g.home_team_id == team_id;
         let opp_id = if home { g.away_team_id } else { g.home_team_id };
         let opp = team_by_id.get(&opp_id);
-        let game_stats = stats_by_game.get(&g.id).map(Vec::as_slice).unwrap_or_default();
+        let game_stats = stats_by_game
+            .get(&g.id)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
         let box_for = |team: u32| {
-            game_stats.iter().find(|s| s.team_id == team).map(BoxScore::from).ok_or_else(|| anyhow!("Game is missing team stats"))
+            game_stats
+                .iter()
+                .find(|s| s.team_id == team)
+                .map(BoxScore::from)
+                .ok_or_else(|| anyhow!("Game is missing team stats"))
         };
-        let game_periods = periods_by_game.get(&g.id).map(Vec::as_slice).unwrap_or_default();
+        let game_periods = periods_by_game
+            .get(&g.id)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
         let by_period = |team: u32| {
             let mut list = vec![0; usize::from(g.periods)];
             for p in game_periods.iter().filter(|p| p.team_id == team) {
@@ -305,7 +322,10 @@ pub async fn load_dataset(pool: &MySqlPool, team_id: u32) -> Result<Dataset> {
             .map(|p| {
                 Ok(PlayRow {
                     period: p.period.into(),
-                    clock_seconds: p.clock_s.parse().with_context(|| format!("clock_s {:?}", p.clock_s))?,
+                    clock_seconds: p
+                        .clock_s
+                        .parse()
+                        .with_context(|| format!("clock_s {:?}", p.clock_s))?,
                     type_text: p.type_text,
                     home_score: p.home_score.into(),
                     away_score: p.away_score.into(),

@@ -1,17 +1,23 @@
 # Knicks game to game
 
-A server-rendered report on the New York Knicks, built from the design in
+A report on the New York Knicks, built from the design in
 `design/index.html`. Game data comes from ESPN's public site API and is stored
-in MySQL; the page is rendered from the database.
+in MySQL. A Rust server computes the report and serves it as JSON; the page
+renders it in the browser.
 
 ## Stack
 
-- Node.js 26 (LTS). Node runs the TypeScript sources directly (type
-  stripping), so there is no build step. `.nvmrc` pins the major version.
-- TypeScript 7.0.2 for type-checking only (`npm run typecheck`).
-  `erasableSyntaxOnly` keeps the code runnable by Node: no enums, namespaces
-  or parameter properties.
-- MySQL through `mysql2`. The web server is `node:http`.
+- Rust, version pinned in `rust-toolchain.toml`. One binary, `knicks`, with
+  three commands: `serve`, `migrate` and `sync`. Axum serves `/api/report`
+  and the built page, sqlx talks to MySQL, and reqwest fetches ESPN.
+  The ESPN client trusts Mozilla's root certificates compiled into the
+  binary (`webpki-root-certs`), not the macOS keychain.
+- The page is plain TypeScript built with Vite (`web/`). It fetches
+  `/api/report` and writes the HTML. The API's TypeScript types in
+  `web/src/api/` are generated from the Rust structs by ts-rs whenever
+  `cargo test` runs; don't edit them by hand.
+- Node.js 26 (`.nvmrc`) runs Vite and TypeScript 7 (`npm run typecheck`).
+- MySQL 9 in a Podman container.
 
 ## Setup
 
@@ -23,29 +29,40 @@ formula is community-maintained). `podman compose` hands off to a separate
 compose provider; this setup uses `podman-compose`. A standalone
 `docker-compose` on the PATH takes precedence over it.
 
+Run everything from the repo root: the binary reads `.env` and serves
+`web/dist` relative to the current directory.
+
 ```sh
 uv tool install podman-compose        # once per machine
 podman machine init && podman machine start
 podman compose up -d                  # start MySQL; `podman compose down` stops it
-nvm use                               # Node 26
+rustup toolchain install              # the version in rust-toolchain.toml
+nvm use                               # Node 26, for Vite
 npm install
 cp .env.example .env                  # already points at the container
-npm run migrate                       # creates the tables
-npm run sync                          # loads games from ESPN (first run: ~110 requests)
-npm start                             # http://localhost:3000
+cargo run -- migrate                  # creates the tables
+cargo run -- sync                     # loads games from ESPN (first run: ~110 requests)
+npm run build                         # builds the page into web/dist
+cargo run --release -- serve          # http://localhost:3000
 ```
 
 `podman compose down -v` also deletes the data volume.
+
+While working on the page, run `cargo run -- serve` for the API on port 3000
+and `npm run dev` for the page on Vite's port (5173); Vite forwards `/api` to
+port 3000. After changing a type the API sends (`src/api.rs`,
+`src/report/compute.rs`), run `cargo test` to regenerate `web/src/api/`.
 
 The server listens on `127.0.0.1` only (`HOST` in `.env`). To open it from
 other devices on your tailnet, run `tailscale serve --bg 3000` on this machine
 and use the `https://<machine>.<tailnet>.ts.net` address it prints;
 `tailscale serve reset` stops it.
 
-While running, the server syncs again every `SYNC_INTERVAL_MINUTES`
-(default 60, `0` turns it off). Stored games are final and never fetched
-again, so a sync only fetches games that finished since the last one. A game
-whose ESPN summary answers 404 is skipped and asked for again on every sync.
+The server syncs once at startup and then every `SYNC_INTERVAL_MINUTES`
+(default 60, `0` means only at startup). Stored games are final and never
+fetched again, so a sync only fetches games that finished since the last one.
+A game whose ESPN summary answers 404 is skipped and asked for again on every
+sync. The report is computed once and kept until a sync stores new games.
 
 ## Data source
 
@@ -80,18 +97,23 @@ Other free sources checked:
 - Rest days count calendar days in New York between games.
 - On/off and pairings replay the play-by-play to know who was on the floor.
   ESPN doesn't list who starts the 2nd quarter onward, so the replay infers it
-  (`src/report/lineups.ts`). A game is used for on-court numbers only when
+  (`src/report/lineups.rs`). A game is used for on-court numbers only when
   every player's replayed plus-minus is within 8 points of the box score.
-- The impact label's thresholds are in `IMPACT` in `src/report/compute.ts`.
+- The impact label's thresholds are in the `impact` module of
+  `src/report/compute.rs`; the label text and tooltip are in
+  `web/src/render/impact.ts`.
 
 ## Layout
 
 ```
 db/schema.sql          tables (datetimes in UTC)
-src/espn.ts            ESPN client and parsing
-src/sync.ts            stores new completed games
-src/report/            load from MySQL, lineup replay, metrics, formatting
-src/render/            HTML and SVG charts
-public/                CSS and the season switch script from the design
+src/main.rs            the knicks commands: serve, migrate, sync
+src/server.rs          HTTP server, report cache, sync timer
+src/espn.rs            ESPN client and parsing
+src/sync.rs            stores new completed games
+src/report/            load from MySQL, lineup replay, metrics
+src/api.rs             the JSON the page reads
+web/src/               the page: HTML, SVG charts, CSS, number formatting
+web/src/api/           API types generated by ts-rs
 design/index.html      the original design
 ```

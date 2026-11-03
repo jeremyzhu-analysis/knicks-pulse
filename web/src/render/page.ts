@@ -44,7 +44,7 @@ function table(head: string[], rows: string[][], className = ""): string {
 
 function hero(report: PageData): string {
   const now = report.current;
-  if (!now) return `<section><h1>No games stored yet</h1><p class="note">Run <code>npm run sync</code> to load games from ESPN.</p></section>`;
+  if (!now) return `<section><h1>No games stored yet</h1><p class="note">Run <code>cargo run -- sync</code> to load games from ESPN.</p></section>`;
   const r = now.ratings;
   const last = report.lastRegular?.ratings ?? null;
 

@@ -5,11 +5,11 @@ use anyhow::Result;
 use serde::Serialize;
 use ts_rs::TS;
 
-use crate::report::compute::{
-    Factors, LastSeries, PlayerReport, QuarterRow, Ratings, Report as Computed, SeasonReport, Situation, build_report,
-    factors, quarters, situations,
-};
 use crate::report::compute::PAIR_MIN_SECONDS;
+use crate::report::compute::{
+    Factors, LastSeries, PlayerReport, QuarterRow, Ratings, Report as Computed, SeasonReport,
+    Situation, build_report, factors, quarters, situations,
+};
 use crate::report::dates::new_york;
 use crate::report::lineups::REPLAY_TOLERANCE;
 use crate::report::load::{self, Dataset};
@@ -136,8 +136,15 @@ fn season(s: SeasonReport) -> Season {
 }
 
 pub fn report(data: &Dataset) -> Result<Report> {
-    let Computed { game_count, replayed_games, seasons, current, last_regular, latest_game, last_series } =
-        build_report(data);
+    let Computed {
+        game_count,
+        replayed_games,
+        seasons,
+        current,
+        last_regular,
+        latest_game,
+        last_series,
+    } = build_report(data);
     let now = current.map(|i| seasons[i].season.games.as_slice());
     let was = last_regular.map(|i| seasons[i].season.games.as_slice());
     let tz = new_york()?;
@@ -156,7 +163,10 @@ pub fn report(data: &Dataset) -> Result<Report> {
         }
         LatestGame {
             game: game(g),
-            top_scorer: top.map(|p| TopScorer { full_name: p.full_name.clone(), pts: p.pts }),
+            top_scorer: top.map(|p| TopScorer {
+                full_name: p.full_name.clone(),
+                pts: p.pts,
+            }),
         }
     });
 

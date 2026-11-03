@@ -9,14 +9,22 @@ pub fn new_york() -> Result<TimeZone> {
 /// Calendar day in New York as days since 1970-01-01, for counting days of rest.
 pub fn day_number(ts: Timestamp, new_york: &TimeZone) -> Result<i64> {
     let date = ts.to_zoned(new_york.clone()).date();
-    Ok(date.to_zoned(TimeZone::UTC)?.timestamp().as_second().div_euclid(86_400))
+    Ok(date
+        .to_zoned(TimeZone::UTC)?
+        .timestamp()
+        .as_second()
+        .div_euclid(86_400))
 }
 
 /// 2027 + type 3 -> "2026–27 playoffs"
 pub fn season_label(season_year: i32, season_type: i32) -> String {
     let year = season_year.to_string();
     let short = year.get(2..).unwrap_or("");
-    let kind = if season_type == 3 { "playoffs" } else { "regular season" };
+    let kind = if season_type == 3 {
+        "playoffs"
+    } else {
+        "regular season"
+    };
     format!("{}–{short} {kind}", season_year - 1)
 }
 
@@ -28,7 +36,9 @@ pub fn last_name(full_name: &str) -> String {
     while words.len() > 1 && SUFFIXES.contains(&words[words.len() - 1].to_lowercase().as_str()) {
         words.pop();
     }
-    words.last().map_or_else(|| full_name.to_string(), |w| w.to_string())
+    words
+        .last()
+        .map_or_else(|| full_name.to_string(), |w| w.to_string())
 }
 
 #[cfg(test)]

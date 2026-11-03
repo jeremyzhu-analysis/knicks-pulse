@@ -21,10 +21,14 @@ async fn main() -> Result<()> {
         }
         Some("sync") => {
             let pool = db::pool(&config.database_url).await?;
-            let result = sync::sync_games(&pool, &espn::Espn::new()?, |line| println!("{line}")).await;
+            let result =
+                sync::sync_games(&pool, &espn::Espn::new()?, |line| println!("{line}")).await;
             pool.close().await;
             let result = result?;
-            println!("Done. {} new games, {} completed games in total.", result.added, result.completed);
+            println!(
+                "Done. {} new games, {} completed games in total.",
+                result.added, result.completed
+            );
         }
         _ => bail!(USAGE),
     }

@@ -1,5 +1,6 @@
-//! Every number on the page. Sums run left to right from 0.0, in the same
-//! order as the TypeScript version, so the floating-point results match it.
+//! Every number on the page. Sums run left to right from 0.0 in a fixed
+//! order (games by date, lineups in order of first appearance); a different
+//! order changes the last digits of the results.
 
 use std::collections::HashMap;
 
@@ -29,7 +30,9 @@ fn count<T>(items: &[T], test: impl Fn(&T) -> bool) -> i32 {
 
 /// Possessions per team, averaging both teams' estimates.
 pub fn possessions(game: &Game) -> f64 {
-    let estimate = |b: &BoxScore| f64::from(b.fga) + 0.44 * f64::from(b.fta) - f64::from(b.oreb) + f64::from(b.tov);
+    let estimate = |b: &BoxScore| {
+        f64::from(b.fga) + 0.44 * f64::from(b.fta) - f64::from(b.oreb) + f64::from(b.tov)
+    };
     (estimate(&game.us) + estimate(&game.them)) / 2.0
 }
 
@@ -164,13 +167,22 @@ fn factor_rows(games: &[&Game], side: Side) -> FactorRows {
     let n = games.len() as f64;
     let total = |f: &dyn Fn(BoxScore, BoxScore) -> f64| sum(games, |g| f(own(g), other(g)));
     FactorRows {
-        efg: ratio(total(&|o, _| f64::from(o.fgm) + 0.5 * f64::from(o.fg3m)), total(&|o, _| f64::from(o.fga))),
+        efg: ratio(
+            total(&|o, _| f64::from(o.fgm) + 0.5 * f64::from(o.fg3m)),
+            total(&|o, _| f64::from(o.fga)),
+        ),
         tov: ratio(
             total(&|o, _| f64::from(o.tov)),
             total(&|o, _| f64::from(o.fga) + 0.44 * f64::from(o.fta) + f64::from(o.tov)),
         ),
-        orb: ratio(total(&|o, _| f64::from(o.oreb)), total(&|o, x| f64::from(o.oreb + x.dreb))),
-        ftr: ratio(total(&|o, _| f64::from(o.fta)), total(&|o, _| f64::from(o.fga))),
+        orb: ratio(
+            total(&|o, _| f64::from(o.oreb)),
+            total(&|o, x| f64::from(o.oreb + x.dreb)),
+        ),
+        ftr: ratio(
+            total(&|o, _| f64::from(o.fta)),
+            total(&|o, _| f64::from(o.fga)),
+        ),
         paint: ratio(total(&|o, _| f64::from(o.paint_pts)), n),
         fast_break: ratio(total(&|o, _| f64::from(o.fast_break_pts)), n),
         off_tov: ratio(total(&|o, _| f64::from(o.pts_off_tov)), n),
@@ -181,12 +193,18 @@ pub fn factors(now: &[&Game], was: &[&Game]) -> Factors {
     let build = |side: Side, prefix: &str, offense: bool| {
         let a = factor_rows(now, side);
         let b = factor_rows(was, side);
-        let row = |label: &str, pick: fn(&FactorRows) -> f64, is_percent: bool, higher_is_good_for_shooter: bool| {
+        let row = |label: &str,
+                   pick: fn(&FactorRows) -> f64,
+                   is_percent: bool,
+                   higher_is_good_for_shooter: bool| {
             let label = if prefix.is_empty() {
                 label.to_string()
             } else {
                 let mut chars = label.chars();
-                let first = chars.next().map(|c| c.to_lowercase().to_string()).unwrap_or_default();
+                let first = chars
+                    .next()
+                    .map(|c| c.to_lowercase().to_string())
+                    .unwrap_or_default();
                 format!("{prefix} {first}{}", chars.as_str())
             };
             Factor {
@@ -194,7 +212,11 @@ pub fn factors(now: &[&Game], was: &[&Game]) -> Factors {
                 now: pick(&a),
                 was: pick(&b),
                 is_percent,
-                higher_helps: if offense { higher_is_good_for_shooter } else { !higher_is_good_for_shooter },
+                higher_helps: if offense {
+                    higher_is_good_for_shooter
+                } else {
+                    !higher_is_good_for_shooter
+                },
             }
         };
         vec![
@@ -207,7 +229,10 @@ pub fn factors(now: &[&Game], was: &[&Game]) -> Factors {
             row("Points off turnovers", |r| r.off_tov, false, true),
         ]
     };
-    Factors { offense: build(Side::Us, "", true), defense: build(Side::Them, "Opponent", false) }
+    Factors {
+        offense: build(Side::Us, "", true),
+        defense: build(Side::Them, "Opponent", false),
+    }
 }
 
 // ---------------------------------------------------------------- quarters
@@ -235,7 +260,10 @@ fn quarter_diff(g: &Game, q: usize) -> i32 {
 }
 
 fn quarter_margin(games: &[&Game], q: usize) -> f64 {
-    ratio(sum(games, |g| f64::from(quarter_diff(g, q))), games.len() as f64)
+    ratio(
+        sum(games, |g| f64::from(quarter_diff(g, q))),
+        games.len() as f64,
+    )
 }
 
 pub fn quarters(now: &[&Game], was: Option<&[&Game]>) -> Vec<QuarterRow> {
@@ -244,8 +272,14 @@ pub fn quarters(now: &[&Game], was: Option<&[&Game]>) -> Vec<QuarterRow> {
             let diffs: Vec<i32> = now.iter().map(|g| quarter_diff(g, q)).collect();
             QuarterRow {
                 quarter: q as i32 + 1,
-                scored: ratio(sum(now, |g| f64::from(period_pts(&g.us_by_period, q))), now.len() as f64),
-                allowed: ratio(sum(now, |g| f64::from(period_pts(&g.them_by_period, q))), now.len() as f64),
+                scored: ratio(
+                    sum(now, |g| f64::from(period_pts(&g.us_by_period, q))),
+                    now.len() as f64,
+                ),
+                allowed: ratio(
+                    sum(now, |g| f64::from(period_pts(&g.them_by_period, q))),
+                    now.len() as f64,
+                ),
                 margin: quarter_margin(now, q),
                 ahead: count(&diffs, |&d| d > 0),
                 behind: count(&diffs, |&d| d < 0),
@@ -283,20 +317,38 @@ fn split(games: &[&Game]) -> Option<Split> {
         return None;
     }
     let r = ratings(games);
-    Some(Split { games: r.games, wins: r.wins, losses: r.losses, margin: r.margin, net: r.net })
+    Some(Split {
+        games: r.games,
+        wins: r.wins,
+        losses: r.losses,
+        margin: r.margin,
+        net: r.net,
+    })
 }
 
-fn situation_games<'a>(games: &[&'a Game], new_york: &TimeZone) -> Result<Vec<(&'static str, Vec<&'a Game>)>> {
+fn situation_games<'a>(
+    games: &[&'a Game],
+    new_york: &TimeZone,
+) -> Result<Vec<(&'static str, Vec<&'a Game>)>> {
     // Days of rest and the previous result, for every game but the first.
     let mut rest_of: Vec<Option<i64>> = vec![None; games.len()];
     let mut after: Vec<Option<bool>> = vec![None; games.len()];
     for i in 1..games.len() {
         let previous = games[i - 1];
-        rest_of[i] = Some(day_number(games[i].starts_at, new_york)? - day_number(previous.starts_at, new_york)? - 1);
+        rest_of[i] = Some(
+            day_number(games[i].starts_at, new_york)?
+                - day_number(previous.starts_at, new_york)?
+                - 1,
+        );
         after[i] = Some(won(previous));
     }
     let pick = |test: &dyn Fn(usize) -> bool| -> Vec<&'a Game> {
-        games.iter().enumerate().filter(|(i, _)| test(*i)).map(|(_, g)| *g).collect()
+        games
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| test(*i))
+            .map(|(_, g)| *g)
+            .collect()
     };
     let rest = |test: fn(i64) -> bool| pick(&|i| rest_of[i].is_some_and(test));
     Ok(vec![
@@ -310,7 +362,11 @@ fn situation_games<'a>(games: &[&'a Game], new_york: &TimeZone) -> Result<Vec<(&
     ])
 }
 
-pub fn situations(now: &[&Game], was: Option<&[&Game]>, new_york: &TimeZone) -> Result<Vec<Situation>> {
+pub fn situations(
+    now: &[&Game],
+    was: Option<&[&Game]>,
+    new_york: &TimeZone,
+) -> Result<Vec<Situation>> {
     let last = was.map(|w| situation_games(w, new_york)).transpose()?;
     Ok(situation_games(now, new_york)?
         .into_iter()
@@ -447,7 +503,11 @@ pub const PAIR_MIN_SECONDS: f64 = 8.0 * 60.0;
 const PAIR_PLAYERS: usize = 8;
 
 fn per48(points: f64, seconds: f64) -> f64 {
-    if seconds == 0.0 { 0.0 } else { (points / seconds) * 2880.0 }
+    if seconds == 0.0 {
+        0.0
+    } else {
+        (points / seconds) * 2880.0
+    }
 }
 
 fn impact_of(p: &PlayerRow, on_off: Option<f64>) -> Impact {
@@ -464,10 +524,13 @@ fn impact_of(p: &PlayerRow, on_off: Option<f64>) -> Impact {
     if p.ppg >= impact::TWO_WAY_PTS && p.spg + p.bpg >= impact::TWO_WAY_STOCKS {
         return make(TwoWay, Lift);
     }
-    if p.ppg >= impact::SCORING_PTS || (per36(p.ppg) >= impact::SCORING_PER36 && p.ts >= impact::SCORING_TS) {
+    if p.ppg >= impact::SCORING_PTS
+        || (per36(p.ppg) >= impact::SCORING_PER36 && p.ts >= impact::SCORING_TS)
+    {
         return make(Scoring, Score);
     }
-    if per36(p.apg) >= impact::CREATION_AST_PER36 && p.apg >= impact::CREATION_AST_PER_TOV * p.topg {
+    if per36(p.apg) >= impact::CREATION_AST_PER36 && p.apg >= impact::CREATION_AST_PER_TOV * p.topg
+    {
         return make(Creation, Score);
     }
     if on_off.is_some_and(|d| d >= impact::LIFT_ON_OFF) {
@@ -506,23 +569,30 @@ pub fn player_report(games: &[&Game], replays: &HashMap<&str, Replay>) -> Player
     let mut together: HashMap<(u32, u32), FloorTime> = HashMap::new();
     let mut replayed_games = 0;
     for game in games {
-        let Some(replay) = replays.get(game.id.as_str()).filter(|r| r.ok) else { continue };
+        let Some(replay) = replays.get(game.id.as_str()).filter(|r| r.ok) else {
+            continue;
+        };
         replayed_games += 1;
         for l in &replay.lineups {
             team.add(l.seconds, l.pts_for, l.pts_against);
             for &a in &l.players {
-                on.entry(a).or_default().add(l.seconds, l.pts_for, l.pts_against);
+                on.entry(a)
+                    .or_default()
+                    .add(l.seconds, l.pts_for, l.pts_against);
                 for &b in &l.players {
                     if a >= b {
                         continue;
                     }
-                    together.entry((a, b)).or_default().add(l.seconds, l.pts_for, l.pts_against);
+                    together
+                        .entry((a, b))
+                        .or_default()
+                        .add(l.seconds, l.pts_for, l.pts_against);
                 }
             }
         }
     }
 
-    // Players in order of first appearance, like the Map in the original.
+    // Players in order of first appearance; it breaks ties in the minutes sort below.
     let mut order: Vec<u32> = Vec::new();
     let mut by_id: HashMap<u32, Vec<&PlayerGame>> = HashMap::new();
     for game in games {
@@ -563,33 +633,49 @@ pub fn player_report(games: &[&Game], replays: &HashMap<&str, Replay>) -> Player
                 spg: total(|l| f64::from(l.stl)) / n,
                 bpg: total(|l| f64::from(l.blk)) / n,
                 topg: total(|l| f64::from(l.tov)) / n,
-                ts: ratio(total(|l| f64::from(l.pts)), 2.0 * total(|l| f64::from(l.fga) + 0.44 * f64::from(l.fta))),
+                ts: ratio(
+                    total(|l| f64::from(l.pts)),
+                    2.0 * total(|l| f64::from(l.fga) + 0.44 * f64::from(l.fta)),
+                ),
                 plus_minus: total(|l| f64::from(l.plus_minus)) / n,
                 on48: split.map(|f| per48(f64::from(f.pts_for - f.pts_against), f.seconds)),
                 off48: split.map(|f| {
-                    per48(f64::from(team.pts_for - f.pts_for - (team.pts_against - f.pts_against)), off_seconds)
+                    per48(
+                        f64::from(team.pts_for - f.pts_for - (team.pts_against - f.pts_against)),
+                        off_seconds,
+                    )
                 }),
                 opp48: split.map(|f| per48(f64::from(f.pts_against), f.seconds)),
-                impact: Impact { kind: ImpactKind::Mixed, tone: ImpactTone::Muted },
+                impact: Impact {
+                    kind: ImpactKind::Mixed,
+                    tone: ImpactTone::Muted,
+                },
             };
             let on_off = row.on48.zip(row.off48).map(|(a, b)| a - b);
             row.impact = impact_of(&row, on_off);
             row
         })
         .collect();
-    players.sort_by(|a, b| b.minutes.cmp(&a.minutes));
+    players.sort_by_key(|p| std::cmp::Reverse(p.minutes));
 
     let top = &players[..players.len().min(PAIR_PLAYERS)];
     let cell = |f: Option<&FloorTime>| {
         f.filter(|f| f.seconds >= PAIR_MIN_SECONDS)
-            .map(|f| PairCell { seconds: f.seconds, net48: per48(f64::from(f.pts_for - f.pts_against), f.seconds) })
+            .map(|f| PairCell {
+                seconds: f.seconds,
+                net48: per48(f64::from(f.pts_for - f.pts_against), f.seconds),
+            })
     };
     let cells: Vec<Vec<Option<PairCell>>> = top
         .iter()
         .map(|a| {
             top.iter()
                 .map(|b| {
-                    if a.id == b.id { cell(on.get(&a.id)) } else { cell(together.get(&(a.id.min(b.id), a.id.max(b.id)))) }
+                    if a.id == b.id {
+                        cell(on.get(&a.id))
+                    } else {
+                        cell(together.get(&(a.id.min(b.id), a.id.max(b.id))))
+                    }
                 })
                 .collect()
         })
@@ -598,8 +684,14 @@ pub fn player_report(games: &[&Game], replays: &HashMap<&str, Replay>) -> Player
     let mut worst: Option<PairExtreme> = None;
     for (i, a) in top.iter().enumerate() {
         for (j, b) in top.iter().enumerate() {
-            let Some(c) = cells[i][j].filter(|_| j > i) else { continue };
-            let extreme = || PairExtreme { a: a.last.clone(), b: b.last.clone(), cell: c };
+            let Some(c) = cells[i][j].filter(|_| j > i) else {
+                continue;
+            };
+            let extreme = || PairExtreme {
+                a: a.last.clone(),
+                b: b.last.clone(),
+                cell: c,
+            };
             if best.as_ref().is_none_or(|x| c.net48 > x.cell.net48) {
                 best = Some(extreme());
             }
@@ -611,7 +703,13 @@ pub fn player_report(games: &[&Game], replays: &HashMap<&str, Replay>) -> Player
 
     PlayerReport {
         pairs: Pairs {
-            players: top.iter().map(|p| PairPlayer { id: p.id, last: p.last.clone() }).collect(),
+            players: top
+                .iter()
+                .map(|p| PairPlayer {
+                    id: p.id,
+                    last: p.last.clone(),
+                })
+                .collect(),
             cells,
             best,
             worst,
@@ -669,7 +767,8 @@ fn strip_game_suffix(note: &str) -> Option<&str> {
     }
     let before_digits = &note[..note.len() - digits];
     let game = before_digits.len().checked_sub("game ".len())?;
-    if !before_digits.is_char_boundary(game) || !before_digits[game..].eq_ignore_ascii_case("game ") {
+    if !before_digits.is_char_boundary(game) || !before_digits[game..].eq_ignore_ascii_case("game ")
+    {
         return None;
     }
     let before_dash = before_digits[..game].trim_end().strip_suffix('-')?;
@@ -677,30 +776,53 @@ fn strip_game_suffix(note: &str) -> Option<&str> {
 }
 
 pub fn build_report(data: &Dataset) -> Report<'_> {
-    let replays: HashMap<&str, Replay> = data.games.iter().map(|g| (g.id.as_str(), replay_game(g))).collect();
+    let replays: HashMap<&str, Replay> = data
+        .games
+        .iter()
+        .map(|g| (g.id.as_str(), replay_game(g)))
+        .collect();
     let seasons: Vec<SeasonReport> = group_seasons(&data.games)
         .into_iter()
-        .map(|season| SeasonReport { player_report: player_report(&season.games, &replays), season })
+        .map(|season| SeasonReport {
+            player_report: player_report(&season.games, &replays),
+            season,
+        })
         .collect();
-    let regular: Vec<usize> = (0..seasons.len()).filter(|&i| seasons[i].season.season_type == 2).collect();
-    let current = regular.first().copied().or(if seasons.is_empty() { None } else { Some(0) });
+    let regular: Vec<usize> = (0..seasons.len())
+        .filter(|&i| seasons[i].season.season_type == 2)
+        .collect();
+    let current = regular
+        .first()
+        .copied()
+        .or(if seasons.is_empty() { None } else { Some(0) });
     let last_regular = current.and_then(|c| {
         let year = seasons[c].season.year;
-        regular.iter().copied().find(|&i| seasons[i].season.year == year - 1)
+        regular
+            .iter()
+            .copied()
+            .find(|&i| seasons[i].season.year == year - 1)
     });
 
-    let last_series = seasons.iter().find(|s| s.season.season_type == 3).and_then(|playoffs| {
-        let final_game = *playoffs.season.games.last()?;
-        let series: Vec<&Game> =
-            playoffs.season.games.iter().copied().filter(|g| g.opponent.id == final_game.opponent.id).collect();
-        let wins = count(&series, |g| won(g));
-        Some(LastSeries {
-            round: round_name(final_game.note.as_deref()).unwrap_or_else(|| "Playoffs".into()),
-            wins,
-            losses: series.len() as i32 - wins,
-            opponent: final_game.opponent.name.clone(),
-        })
-    });
+    let last_series = seasons
+        .iter()
+        .find(|s| s.season.season_type == 3)
+        .and_then(|playoffs| {
+            let final_game = *playoffs.season.games.last()?;
+            let series: Vec<&Game> = playoffs
+                .season
+                .games
+                .iter()
+                .copied()
+                .filter(|g| g.opponent.id == final_game.opponent.id)
+                .collect();
+            let wins = count(&series, |g| won(g));
+            Some(LastSeries {
+                round: round_name(final_game.note.as_deref()).unwrap_or_else(|| "Playoffs".into()),
+                wins,
+                losses: series.len() as i32 - wins,
+                opponent: final_game.opponent.name.clone(),
+            })
+        });
 
     Report {
         game_count: data.games.len() as i32,
@@ -719,10 +841,22 @@ mod tests {
 
     #[test]
     fn round_names() {
-        assert_eq!(round_name(Some("NBA Finals - Game 5")).as_deref(), Some("Finals"));
-        assert_eq!(round_name(Some("East 1st Round - Game 7")).as_deref(), Some("East 1st Round"));
-        assert_eq!(round_name(Some("East Semifinals -game 12")).as_deref(), Some("East Semifinals"));
-        assert_eq!(round_name(Some("NBA Cup Final")).as_deref(), Some("Cup Final"));
+        assert_eq!(
+            round_name(Some("NBA Finals - Game 5")).as_deref(),
+            Some("Finals")
+        );
+        assert_eq!(
+            round_name(Some("East 1st Round - Game 7")).as_deref(),
+            Some("East 1st Round")
+        );
+        assert_eq!(
+            round_name(Some("East Semifinals -game 12")).as_deref(),
+            Some("East Semifinals")
+        );
+        assert_eq!(
+            round_name(Some("NBA Cup Final")).as_deref(),
+            Some("Cup Final")
+        );
         assert_eq!(round_name(Some("NBAX - Game 1")).as_deref(), Some("NBAX"));
         assert_eq!(round_name(Some("Game 3")).as_deref(), Some("Game 3"));
         assert_eq!(round_name(Some(" - Game 3")), None);
