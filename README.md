@@ -16,7 +16,7 @@ renders it in the browser.
   `/api/report` and writes the HTML. The API's TypeScript types in
   `web/src/api/` are generated from the Rust structs by ts-rs whenever
   `cargo test` runs; don't edit them by hand.
-- Node.js 26 (`.nvmrc`) runs Vite and TypeScript 7 (`npm run typecheck`).
+- Node.js 26.13.0 (`.nvmrc`) runs Vite and TypeScript 7 (`npm run typecheck`).
 - MySQL 9 in a Podman container.
 
 ## Setup
@@ -37,7 +37,7 @@ uv tool install podman-compose        # once per machine
 podman machine init && podman machine start
 podman compose up -d                  # start MySQL; `podman compose down` stops it
 rustup toolchain install              # the version in rust-toolchain.toml
-nvm use                               # Node 26, for Vite
+nvm use                               # Node 26.13.0, for Vite
 npm install
 cp .env.example .env                  # already points at the container
 cargo run -- migrate                  # creates the tables
