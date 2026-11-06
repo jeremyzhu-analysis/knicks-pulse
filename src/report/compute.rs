@@ -10,7 +10,7 @@ use serde::Serialize;
 use ts_rs::TS;
 
 use crate::report::dates::{day_number, last_name, season_label};
-use crate::report::lineups::{Replay, replay_game};
+use crate::report::lineups::{Replay, Stint, replay_game};
 use crate::report::load::{BoxScore, Dataset, Game, PlayerGame};
 
 // ---------------------------------------------------------------- basics
@@ -717,6 +717,64 @@ pub fn player_report(games: &[&Game], replays: &HashMap<&str, Replay>) -> Player
         players,
         replayed_games,
     }
+}
+
+// ---------------------------------------------------------------- one game
+
+#[derive(Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct GamePlayer {
+    pub id: u32,
+    pub name: String,
+    pub position: Option<String>,
+    pub starter: bool,
+    pub minutes: i32,
+    pub pts: i32,
+    pub reb: i32,
+    pub ast: i32,
+    pub stl: i32,
+    pub blk: i32,
+    pub tov: i32,
+    /// Null without a shot or free throw.
+    pub ts: Option<f64>,
+    pub plus_minus: i32,
+    /// Empty when the game's replay didn't hold up.
+    pub stints: Vec<Stint>,
+}
+
+/// Starters first, then by minutes.
+pub fn game_players(game: &Game, replay: &Replay) -> Vec<GamePlayer> {
+    let mut players: Vec<GamePlayer> = game
+        .players
+        .iter()
+        .map(|p| {
+            let shots = f64::from(p.fga) + 0.44 * f64::from(p.fta);
+            GamePlayer {
+                id: p.player_id,
+                name: p.full_name.clone(),
+                position: p.position.clone(),
+                starter: p.starter,
+                minutes: p.minutes,
+                pts: p.pts,
+                reb: p.reb,
+                ast: p.ast,
+                stl: p.stl,
+                blk: p.blk,
+                tov: p.tov,
+                ts: (shots > 0.0).then(|| f64::from(p.pts) / (2.0 * shots)),
+                plus_minus: p.plus_minus,
+                stints: replay
+                    .stints
+                    .get(&p.player_id)
+                    .filter(|_| replay.ok)
+                    .cloned()
+                    .unwrap_or_default(),
+            }
+        })
+        .collect();
+    players.sort_by_key(|p| (std::cmp::Reverse(p.starter), std::cmp::Reverse(p.minutes)));
+    players
 }
 
 // ---------------------------------------------------------------- report

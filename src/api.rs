@@ -1,4 +1,4 @@
-//! The JSON the page reads from `/api/report`. ts-rs writes matching
+//! The JSON the page reads from `/api/report` and `/api/games/{id}`. ts-rs writes matching
 //! TypeScript types to web/src/api when `cargo test` runs.
 
 use anyhow::Result;
@@ -7,11 +7,11 @@ use ts_rs::TS;
 
 use crate::report::compute::PAIR_MIN_SECONDS;
 use crate::report::compute::{
-    Factors, LastSeries, PlayerReport, QuarterRow, Ratings, Report as Computed, SeasonReport,
-    Situation, build_report, factors, quarters, situations,
+    Factors, GamePlayer, LastSeries, PlayerReport, QuarterRow, Ratings, Report as Computed,
+    SeasonReport, Situation, build_report, factors, game_players, quarters, situations,
 };
 use crate::report::dates::new_york;
-use crate::report::lineups::REPLAY_TOLERANCE;
+use crate::report::lineups::{REPLAY_TOLERANCE, replay_game};
 use crate::report::load::{self, Dataset};
 
 #[derive(Serialize, TS)]
@@ -101,6 +101,28 @@ pub struct LatestGame {
     pub game: Game,
     /// First player with the most points, in box-score order.
     pub top_scorer: Option<TopScorer>,
+}
+
+#[derive(Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct GameDetail {
+    #[serde(flatten)]
+    pub game: Game,
+    /// False when the lineup replay is too far from the box score to show stints.
+    pub replayed: bool,
+    pub replay_tolerance: i32,
+    pub players: Vec<GamePlayer>,
+}
+
+pub fn game_detail(g: &load::Game) -> GameDetail {
+    let replay = replay_game(g);
+    GameDetail {
+        game: game(g),
+        replayed: replay.ok,
+        replay_tolerance: REPLAY_TOLERANCE,
+        players: game_players(g, &replay),
+    }
 }
 
 fn game(g: &load::Game) -> Game {

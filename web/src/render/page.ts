@@ -1,4 +1,5 @@
 import type { Factor } from "../api/Factor.ts";
+import type { Game } from "../api/Game.ts";
 import type { LatestGame } from "../api/LatestGame.ts";
 import type { PlayerRow } from "../api/PlayerRow.ts";
 import type { Report } from "../api/Report.ts";
@@ -33,7 +34,7 @@ function seasonPanels(report: PageData, body: (season: Season) => string): strin
   );
 }
 
-function table(head: string[], rows: string[][], className = ""): string {
+export function table(head: string[], rows: string[][], className = ""): string {
   return (
     `<div class="scroll${className ? ` ${className}` : ""}"><table><thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead>` +
     `<tbody>${rows.map((r) => `<tr>${r.map((c) => (c.startsWith("<td") ? c : `<td>${c}</td>`)).join("")}</tr>`).join("")}</tbody></table></div>`
@@ -78,26 +79,47 @@ function hero(report: PageData): string {
 </section>`;
 }
 
-function latestGame(game: LatestGame | null): string {
-  if (!game) return "";
+const periodName = (i: number) => (i < 4 ? `Q${i + 1}` : i === 4 ? "OT" : `OT${i - 3}`);
+
+/** Score by period for both teams, with the margin. */
+export function scoreTable(game: Game): string {
   const quartersPlayed = game.usByPeriod.map((p, i) => p - (game.themByPeriod[i] ?? 0));
-  const swing = quartersPlayed.reduce((best, d, i) => (Math.abs(d) > Math.abs(quartersPlayed[best]!) ? i : best), 0);
-  const top = game.topScorer;
-  const periodName = (i: number) => (i < 4 ? `Q${i + 1}` : i === 4 ? "OT" : `OT${i - 3}`);
-  const summary = [
-    `${game.home ? "Home" : "Road"} ${won(game) ? "win" : "loss"}.`,
-    `${periodName(swing)} ${signed(quartersPlayed[swing] ?? 0, 0)}.`,
-    top ? `${e(lastName(top.fullName))} ${top.pts} pts.` : "",
-  ].join(" ");
   const head = ["Team", ...game.usByPeriod.map((_, i) => periodName(i)), "Final"];
   const rows = [
     [TEAM, ...game.usByPeriod.map(String), `<b>${game.pts}</b>`],
     [e(game.opponent.abbreviation), ...game.themByPeriod.map(String), String(game.oppPts)],
     ["Margin", ...quartersPlayed.map((d) => signed(d, 0)), signed(margin(game), 0)],
   ];
-  const where = [longDate(game.startsAt), `${game.home ? "vs" : "at"} ${game.opponent.abbreviation}`, game.venue].filter(Boolean);
+  return table(head, rows);
+}
+
+/** Date, opponent and venue. */
+export function gameWhere(game: Game): string {
+  return [longDate(game.startsAt), `${game.home ? "vs" : "at"} ${game.opponent.abbreviation}`, game.venue]
+    .filter(Boolean)
+    .map((w) => e(w!))
+    .join(" · ");
+}
+
+export function pageHeader(note: string): string {
+  return `<header>
+  <div class="brand">${knicksMark}<div><p class="kicker">New York Knicks</p><strong>Game to game</strong><p class="note">${note}</p></div></div>
+  ${liberty}
+</header>`;
+}
+
+function latestGame(game: LatestGame | null): string {
+  if (!game) return "";
+  const quartersPlayed = game.usByPeriod.map((p, i) => p - (game.themByPeriod[i] ?? 0));
+  const swing = quartersPlayed.reduce((best, d, i) => (Math.abs(d) > Math.abs(quartersPlayed[best]!) ? i : best), 0);
+  const top = game.topScorer;
+  const summary = [
+    `${game.home ? "Home" : "Road"} ${won(game) ? "win" : "loss"}.`,
+    `${periodName(swing)} ${signed(quartersPlayed[swing] ?? 0, 0)}.`,
+    top ? `${e(lastName(top.fullName))} ${top.pts} pts.` : "",
+  ].join(" ");
   return `<section><p class="kicker">Latest game</p><h2>${TEAM} ${game.pts}, ${e(game.opponent.name)} ${game.oppPts}</h2>` +
-    `<p class="note">${where.map((w) => e(w!)).join(" · ")}</p><p>${summary}</p>${table(head, rows)}</section>`;
+    `<p class="note">${gameWhere(game)}</p><p>${summary} <a href="#game/${e(game.id)}">Player by player</a></p>${scoreTable(game)}</section>`;
 }
 
 function seasonCards(report: PageData): string {
@@ -121,12 +143,18 @@ function seasonCards(report: PageData): string {
 </section>`;
 }
 
+function gameLinks(games: Game[]): string {
+  const links = [...games].reverse().map((g) =>
+    `<a href="#game/${e(g.id)}">${shortDate(g.startsAt)} ${e(g.opponent.abbreviation)} <span class="${won(g) ? "good" : "bad"}">${signed(margin(g), 0)}</span></a>`);
+  return `<div class="gamelinks">${links.join("")}</div>`;
+}
+
 function gamesSection(report: PageData): string {
   return `<section id="games">
   <p class="kicker">02 / Game to game</p>
   <h2>The margin, one night at a time</h2>
   <p>Dot is the final margin. Line is the running average.</p>
-  ${seasonPanels(report, (s) => `${marginChart(s.games)}<p class="note">Orange win. Blue loss. White line, 5-game average.</p>`)}
+  ${seasonPanels(report, (s) => `${marginChart(s.games)}<p class="note">Orange win. Blue loss. White line, 5-game average. Pick a game to see it player by player.</p>${gameLinks(s.games)}`)}
 </section>`;
 }
 
@@ -284,10 +312,7 @@ export function renderBody(api: Report): string {
   const season = (key: string | null) => api.seasons.find((s) => s.key === key) ?? null;
   const report: PageData = { ...api, current: season(api.currentKey), lastRegular: season(api.lastRegularKey) };
   const updated = report.syncedAt ? `Updated ${dateTime(report.syncedAt)}` : "No data yet";
-  return `<header>
-  <div class="brand">${knicksMark}<div><p class="kicker">New York Knicks</p><strong>Game to game</strong><p class="note">${updated}</p></div></div>
-  ${liberty}
-</header>
+  return `${pageHeader(updated)}
 <main>
 <nav>
   <a href="#season">Season</a><a href="#games">Game to game</a><a href="#quarters">Quarters</a>

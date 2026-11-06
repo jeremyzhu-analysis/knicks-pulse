@@ -8,12 +8,13 @@ renders it in the browser.
 ## Stack
 
 - Rust, version pinned in `rust-toolchain.toml`. One binary, `knicks`, with
-  three commands: `serve`, `migrate` and `sync`. Axum serves `/api/report`
-  and the built page, sqlx talks to MySQL, and reqwest fetches ESPN.
+  three commands: `serve`, `migrate` and `sync`. Axum serves `/api/report`,
+  `/api/games/{id}` and the built page, sqlx talks to MySQL, and reqwest fetches ESPN.
   The ESPN client trusts Mozilla's root certificates compiled into the
   binary (`webpki-root-certs`), not the macOS keychain.
 - The page is plain TypeScript built with Vite (`web/`). It fetches
-  `/api/report` and writes the HTML. The API's TypeScript types in
+  `/api/report` and writes the HTML; `#game/{id}` shows one game from
+  `/api/games/{id}`. The API's TypeScript types in
   `web/src/api/` are generated from the Rust structs by ts-rs whenever
   `cargo test` runs; don't edit them by hand.
 - Node.js 26.13.0 (`.nvmrc`) runs Vite and TypeScript 7 (`npm run typecheck`).
@@ -62,7 +63,7 @@ The server syncs once at startup and then every `SYNC_INTERVAL_MINUTES`
 (default 60, `0` means only at startup). Stored games are final and never
 fetched again, so a sync only fetches games that finished since the last one.
 A game whose ESPN summary answers 404 is skipped and asked for again on every
-sync. The report is computed once and kept until a sync stores new games.
+sync. The report and game JSON are computed once and kept until a sync stores new games.
 
 ## Data source
 
@@ -99,6 +100,9 @@ Other free sources checked:
   ESPN doesn't list who starts the 2nd quarter onward, so the replay infers it
   (`src/report/lineups.rs`). A game is used for on-court numbers only when
   every player's replayed plus-minus is within 8 points of the box score.
+- A game's stints come from the same replay, and are left out when that game
+  fails the check above. Each one's net points can differ from the box score
+  by up to that same 8.
 - The impact label's thresholds are in the `impact` module of
   `src/report/compute.rs`; the label text and tooltip are in
   `web/src/render/impact.ts`.
@@ -108,7 +112,7 @@ Other free sources checked:
 ```
 db/schema.sql          tables (datetimes in UTC)
 src/main.rs            the knicks commands: serve, migrate, sync
-src/server.rs          HTTP server, report cache, sync timer
+src/server.rs          HTTP server, JSON cache, sync timer
 src/espn.rs            ESPN client and parsing
 src/sync.rs            stores new completed games
 src/report/            load from MySQL, lineup replay, metrics

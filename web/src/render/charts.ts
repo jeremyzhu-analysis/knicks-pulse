@@ -42,7 +42,7 @@ export function marginChart(games: Game[]): string {
   const dots = games
     .map((g, i) => {
       const title = `${longDate(g.startsAt)} ${g.opponent.abbreviation} ${signed(margins[i]!, 0)}`;
-      return `<circle cx="${x(i).toFixed(1)}" cy="${y(margins[i]!).toFixed(1)}" r="4.5" fill="${won(g) ? ORANGE : BLUE}"><title>${escapeHtml(title)}</title></circle>`;
+      return `<a href="#game/${escapeHtml(g.id)}"><circle cx="${x(i).toFixed(1)}" cy="${y(margins[i]!).toFixed(1)}" r="4.5" fill="${won(g) ? ORANGE : BLUE}"><title>${escapeHtml(title)}</title></circle></a>`;
     })
     .join("");
   return (

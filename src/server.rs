@@ -1,10 +1,11 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
 use axum::Router;
 use axum::body::Bytes;
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use axum::http::{HeaderValue, Response, StatusCode};
 use axum::response::IntoResponse;
@@ -22,41 +23,75 @@ use crate::{api, sync};
 /// Built by `npm run build`; paths are relative to the repo root.
 const DIST: &str = "web/dist";
 
+/// The API's JSON, ready to send.
+struct Built {
+    report: Bytes,
+    /// By game id.
+    games: HashMap<String, Bytes>,
+}
+
 struct AppState {
     pool: MySqlPool,
-    /// The report only changes when a sync stores new games, so its JSON is
-    /// built once and kept until then. The lock also makes concurrent first
-    /// requests wait for one build instead of starting their own.
-    report: Mutex<Option<Bytes>>,
+    /// The JSON only changes when a sync stores new games, so it's built once
+    /// and kept until then. The lock also makes concurrent first requests wait
+    /// for one build instead of starting their own.
+    built: Mutex<Option<Arc<Built>>>,
 }
 
 impl AppState {
-    async fn report_json(&self) -> Result<Bytes> {
-        let mut cached = self.report.lock().await;
-        if let Some(json) = cached.as_ref() {
-            return Ok(json.clone());
+    async fn built(&self) -> Result<Arc<Built>> {
+        let mut cached = self.built.lock().await;
+        if let Some(built) = cached.as_ref() {
+            return Ok(built.clone());
         }
         let data = load_dataset(&self.pool, TEAM_ID).await?;
-        let json = Bytes::from(serde_json::to_vec(&api::report(&data)?)?);
-        *cached = Some(json.clone());
-        Ok(json)
+        let mut games = HashMap::new();
+        for game in &data.games {
+            let json = serde_json::to_vec(&api::game_detail(game))?;
+            games.insert(game.id.clone(), Bytes::from(json));
+        }
+        let built = Arc::new(Built {
+            report: Bytes::from(serde_json::to_vec(&api::report(&data)?)?),
+            games,
+        });
+        *cached = Some(built.clone());
+        Ok(built)
     }
 }
 
-async fn report(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    match state.report_json().await {
-        Ok(json) => (
-            [
-                (CONTENT_TYPE, "application/json"),
-                (CACHE_CONTROL, "no-cache"),
-            ],
-            json,
-        )
-            .into_response(),
-        Err(error) => {
-            eprintln!("{error:#}");
-            (StatusCode::INTERNAL_SERVER_ERROR, "Something went wrong.").into_response()
-        }
+fn json_response(json: Bytes) -> axum::response::Response {
+    (
+        [
+            (CONTENT_TYPE, "application/json"),
+            (CACHE_CONTROL, "no-cache"),
+        ],
+        json,
+    )
+        .into_response()
+}
+
+fn server_error(error: anyhow::Error) -> axum::response::Response {
+    eprintln!("{error:#}");
+    (StatusCode::INTERNAL_SERVER_ERROR, "Something went wrong.").into_response()
+}
+
+async fn report(State(state): State<Arc<AppState>>) -> axum::response::Response {
+    match state.built().await {
+        Ok(built) => json_response(built.report.clone()),
+        Err(error) => server_error(error),
+    }
+}
+
+async fn game_detail(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> axum::response::Response {
+    match state.built().await {
+        Ok(built) => match built.games.get(&id) {
+            Some(json) => json_response(json.clone()),
+            None => (StatusCode::NOT_FOUND, "Not found").into_response(),
+        },
+        Err(error) => server_error(error),
     }
 }
 
@@ -78,6 +113,7 @@ fn app(state: Arc<AppState>) -> Router {
     let pages = ServeDir::new(DIST).not_found_service(get(not_found));
     Router::new()
         .route("/api/report", get(report))
+        .route("/api/games/{id}", get(game_detail))
         .with_state(state)
         .nest_service(
             "/assets",
@@ -111,7 +147,7 @@ async fn sync_loop(state: Arc<AppState>, minutes: u64) {
             ticks.tick().await;
         }
         match sync::sync_games(&state.pool, &espn, |line| println!("[sync] {line}")).await {
-            Ok(result) if result.added > 0 => *state.report.lock().await = None,
+            Ok(result) if result.added > 0 => *state.built.lock().await = None,
             Ok(_) => {}
             Err(error) => eprintln!("[sync] failed: {error:#}"),
         }
@@ -141,7 +177,7 @@ async fn shutdown_signal() {
 pub async fn serve(config: &Config, pool: MySqlPool) -> Result<()> {
     let state = Arc::new(AppState {
         pool,
-        report: Mutex::new(None),
+        built: Mutex::new(None),
     });
     let listener = tokio::net::TcpListener::bind((config.host.as_str(), config.port))
         .await

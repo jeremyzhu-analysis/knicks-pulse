@@ -60,4 +60,7 @@ dd { margin: 0; }
   .tiles, .cards, .factor { grid-template-columns: 1fr 1fr; }
   .factor { grid-template-columns: 1fr; }
 }
+.gamelinks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.gamelinks a { background: #1c1c1c; font-size: 13px; padding: 4px 8px; text-decoration: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.stints { white-space: nowrap; color: #a39e94; font-size: 13px; }
 .readout { color: #a39e94; font-size: 13px; min-height: 1.5em; }
