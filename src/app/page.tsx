@@ -5,13 +5,23 @@ import { MarginChart } from "@/components/margin-chart";
 import { PairHeatmap } from "@/components/pair-heatmap";
 import { PlayerTable, type PlayerTableRow } from "@/components/player-table";
 import { QuarterHeatmap } from "@/components/quarter-heatmap";
+import { ShotChart, type ShotDot } from "@/components/shot-chart";
 import { Section } from "@/components/site-frame";
-import { buildReport, type FactorRow, type Ratings, type SeasonView, type Situation } from "@/lib/analytics";
+import { buildReport, type FactorRow, type LatestView, type Ratings, type SeasonView, type Situation } from "@/lib/analytics";
 import { etDate, fixed, place, prettySeason, record, signed } from "@/lib/format";
+import { parseView } from "@/lib/nav";
 import { readStore } from "@/lib/store";
+import type { Store } from "@/lib/types";
 
-export default function HomePage() {
-  const report = buildReport(readStore());
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ layer?: string; tab?: string; player?: string }>;
+}) {
+  const query = await searchParams;
+  const view = parseView(query.layer, query.tab);
+  const store = readStore();
+  const report = buildReport(store);
   const { current, previous, playoffs } = report;
   const views = report.seasons
     .filter((season) => season.ratings.games > 0)
@@ -33,135 +43,46 @@ export default function HomePage() {
       previousOnOff: previousPlayers.get(player.id)?.onOff ?? null,
     }));
 
+  const shots = view.layer === "players" && view.tab === "shots" ? shotDots(store) : [];
+
   return (
     <main className="mx-auto max-w-[1080px] px-5">
-      <article className="border-b border-rule py-10 md:py-14">
+      <article className="border-b border-rule py-8 md:py-10">
         <p className="text-[11px] uppercase tracking-[0.18em] text-knicks">{report.hero.kicker}</p>
-        <h1 className="mt-3 max-w-[22em] text-[32px] font-bold leading-[1.12] md:text-[44px]">{report.hero.title}</h1>
-        <p className="mt-5 max-w-[36ch] text-[16px] leading-snug text-muted">{report.hero.body}</p>
+        <h1 className="mt-3 max-w-[18em] text-[32px] font-bold leading-[1.12] md:text-[44px]">{report.hero.title}</h1>
+        <p className="mt-4 max-w-[36ch] text-[16px] leading-snug text-muted">{report.hero.body}</p>
         {current ? <SeasonTiles current={current} previous={previous} /> : null}
       </article>
 
-      {report.latest ? (
-        <section className="border-b border-rule py-10">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-muted">Latest game</p>
-          <h2 className="mt-2 text-[26px] font-bold leading-tight">
-            <Link href={`/games/${report.latest.id}`} className="text-ink">
-              Knicks {report.latest.knicksScore}, {report.latest.opponentName} {report.latest.opponentScore}
-            </Link>
-          </h2>
-          <p className="mt-2 text-[14px] text-muted">
-            {etDate(report.latest.date)} · {place(report.latest.home, report.latest.neutral)} {report.latest.opponentAbbr} ·{" "}
-            {report.latest.venue}
-            {report.latest.series ? ` · ${report.latest.series}` : ""}
-          </p>
-          <p className="mt-4 text-[16px]">{report.latest.note}</p>
-          <div className="mt-6 overflow-x-auto">
-            <table className="w-full min-w-[520px] border-collapse text-left">
-              <thead>
-                <tr className="border-b border-rule text-[11px] uppercase tracking-[0.14em] text-muted">
-                  <th className="py-2 pr-3 font-normal">Team</th>
-                  {report.latest.quarters.map((quarter) => (
-                    <th key={quarter.period} className="px-2 py-2 text-right font-normal">
-                      {quarter.label}
-                    </th>
-                  ))}
-                  <th className="px-2 py-2 text-right font-normal">Final</th>
-                </tr>
-              </thead>
-              <tbody className="tabular text-[15px]">
-                <tr className="border-b border-rule">
-                  <td className="py-2 pr-3">Knicks</td>
-                  {report.latest.quarters.map((quarter) => (
-                    <td key={quarter.period} className="px-2 py-2 text-right">
-                      {quarter.knicks}
-                    </td>
-                  ))}
-                  <td className="px-2 py-2 text-right font-bold">{report.latest.knicksScore}</td>
-                </tr>
-                <tr className="border-b border-rule">
-                  <td className="py-2 pr-3">{report.latest.opponentAbbr}</td>
-                  {report.latest.quarters.map((quarter) => (
-                    <td key={quarter.period} className="px-2 py-2 text-right">
-                      {quarter.opponent}
-                    </td>
-                  ))}
-                  <td className="px-2 py-2 text-right">{report.latest.opponentScore}</td>
-                </tr>
-                <tr>
-                  <td className="py-2 pr-3 text-muted">Margin</td>
-                  {report.latest.quarters.map((quarter) => (
-                    <td key={quarter.period} className="px-2 py-2 text-right text-muted">
-                      {signed(quarter.margin, 0)}
-                    </td>
-                  ))}
-                  <td className="px-2 py-2 text-right text-muted">
-                    {signed(report.latest.knicksScore - report.latest.opponentScore, 0)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div className="mt-6 overflow-x-auto">
-            <table className="w-full min-w-[640px] border-collapse text-left">
-              <thead>
-                <tr className="border-b border-rule text-[11px] uppercase tracking-[0.14em] text-muted">
-                  <th className="py-2 pr-3 font-normal">Knicks, by game score</th>
-                  <th className="px-2 py-2 text-right font-normal">Min</th>
-                  <th className="px-2 py-2 text-right font-normal">Pts</th>
-                  <th className="px-2 py-2 text-right font-normal">Reb</th>
-                  <th className="px-2 py-2 text-right font-normal">Ast</th>
-                  <th className="px-2 py-2 text-right font-normal">+/−</th>
-                  <th className="px-2 py-2 text-right font-normal">Game score</th>
-                </tr>
-              </thead>
-              <tbody className="tabular text-[14px]">
-                {report.latest.players.map((player) => (
-                  <tr key={player.id} className="border-b border-rule">
-                    <td className="py-2 pr-3">
-                      <Link href={`/players/${player.id}`} className="text-ink">
-                        {player.name}
-                      </Link>
-                    </td>
-                    <td className="px-2 py-2 text-right">{Math.round(player.minutes)}</td>
-                    <td className="px-2 py-2 text-right">{player.pts}</td>
-                    <td className="px-2 py-2 text-right">{player.reb}</td>
-                    <td className="px-2 py-2 text-right">{player.ast}</td>
-                    <td className="px-2 py-2 text-right">{signed(player.plusMinus, 0)}</td>
-                    <td className="px-2 py-2 text-right">{fixed(player.gameScore)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+      {view.layer === "team" && view.tab === "season" ? (
+        <Section id="season" index="Team  /  Season" title="Last year against this year" lede={report.notes.season}>
+          <SeasonCompare current={current} previous={previous} playoffs={playoffs} />
+        </Section>
       ) : null}
 
-      <Section
-        id="season"
-        index="01  /  Season"
-        title="Last year against this year"
-        lede={report.notes.season}
-      >
-        <SeasonCompare current={current} previous={previous} playoffs={playoffs} />
-      </Section>
+      {view.layer === "team" && view.tab === "games" ? (
+        <Section
+          id="games"
+          index="Team  /  Games"
+          title="One night at a time"
+          lede={report.latest?.note ?? "Final margin, then the running average."}
+          source="Dot is the final margin. Line is the running average."
+        >
+          {report.latest ? <LatestGame latest={report.latest} /> : null}
+          <div className={report.latest ? "mt-10" : ""}>
+            <MarginChart views={views} initialId={initialId} />
+          </div>
+        </Section>
+      ) : null}
 
-      <Section
-        id="games"
-        index="02  /  Game to game"
-        title="The margin, one night at a time"
-        lede="Dot is the final margin. Line is the running average."
-      >
-        <MarginChart views={views} initialId={initialId} />
-      </Section>
-
-      <Section
-        id="quarters"
-        index="03  /  Quarters"
-        title="Where the game is won or lost"
-        lede={report.notes.quarters}
-        source="Overtime stays in the grid, not the four-quarter average."
-      >
+      {view.layer === "team" && view.tab === "quarters" ? (
+        <Section
+          id="quarters"
+          index="Team  /  Quarters"
+          title="Margin by quarter"
+          lede={report.notes.quarters}
+          source="Overtime stays in the grid, not the four-quarter average."
+        >
         {current ? (
           <QuarterBars
             current={current.quarters}
@@ -178,51 +99,177 @@ export default function HomePage() {
         <div className="mt-10">
           <QuarterHeatmap views={views} initialId={initialId} />
         </div>
-      </Section>
+        </Section>
+      ) : null}
 
-      <Section
-        id="factors"
-        index="04  /  Offense and defense"
-        title="Four factors, both ends"
-        lede={report.notes.factors}
-      >
-        <FactorBoard rows={report.factors.filter((row) => row.group !== "Scoring")} />
-      </Section>
+      {view.layer === "team" && view.tab === "factors" ? (
+        <Section
+          id="factors"
+          index="Team  /  Offense and defense"
+          title="Four factors, both ends"
+          lede={report.notes.factors}
+          source="Bar is the change from last regular season."
+        >
+          <FactorBoard rows={report.factors.filter((row) => row.group !== "Scoring")} />
+        </Section>
+      ) : null}
 
-      <Section
-        id="situations"
-        index="05  /  Situations"
-        title="Home, road, and the night after"
-        lede={report.notes.situations}
-        source="Rest uses the Eastern Time calendar."
-      >
-        <SituationTable current={current} previous={previous} />
-      </Section>
+      {view.layer === "team" && view.tab === "situations" ? (
+        <Section
+          id="situations"
+          index="Team  /  Situations"
+          title="Home, road, and rest"
+          lede={report.notes.situations}
+          source="Rest uses the Eastern Time calendar."
+        >
+          <SituationTable current={current} previous={previous} />
+        </Section>
+      ) : null}
 
-      <Section
-        id="players"
-        index="06  /  Players"
-        title="What kind of impact"
-        lede={report.notes.players}
-        source="On−off is margin on the floor minus margin on the bench."
-      >
-        <PlayerTable rows={playerRows} compareLabel={previous ? `${prettySeason(previous.season)} on−off` : undefined} />
-        <p className="mt-4 text-[14px]">
-          <Link href="/players" className="text-ink">
-            All players, both seasons
-          </Link>
-          <span className="mx-3 text-faint">/</span>
-          <Link href="/shots" className="text-ink">
-            Shot map
-          </Link>
-        </p>
-      </Section>
+      {view.layer === "players" && view.tab === "impact" ? (
+        <Section
+          id="impact"
+          index="Players  /  Impact"
+          title="On-court swing"
+          lede={report.notes.players}
+          source="On−off is on-court margin minus the bench."
+        >
+          <PlayerTable rows={playerRows} compareLabel={previous ? `${prettySeason(previous.season)} on−off` : undefined} />
+          {report.seasons
+            .filter((season) => season.ratings.games > 0 && !(current && season.season === current.season && season.phase === current.phase))
+            .map((season) => {
+              const rows: PlayerTableRow[] = report.players
+                .filter((player) => player.season === season.season && player.phase === season.phase)
+                .map((player) => ({ ...player, previousOnOff: null }));
+              return (
+                <div key={season.label} className="mt-12 border-t border-rule pt-8">
+                  <h3 className="text-[18px] font-bold">{season.label}</h3>
+                  <p className="mt-2 text-[14px] text-muted">{season.ratings.games} games, sorted by minutes.</p>
+                  <div className="mt-5">
+                    <PlayerTable rows={rows} />
+                  </div>
+                </div>
+              );
+            })}
+        </Section>
+      ) : null}
 
-      <Section id="pairs" index="07  /  Pairings" title="Who helps whom" lede={report.notes.pairs} source="Blank under 8 shared minutes. Diagonal is that player on the floor.">
-        <PairHeatmap boards={report.pairs} initialId={initialId} />
-      </Section>
+      {view.layer === "players" && view.tab === "pairs" ? (
+        <Section
+          id="pairs"
+          index="Players  /  Pairings"
+          title="Who shares the floor"
+          lede={report.notes.pairs}
+          source="Blank under 8 shared minutes. Diagonal is that player alone."
+        >
+          <PairHeatmap boards={report.pairs} initialId={initialId} />
+        </Section>
+      ) : null}
+
+      {view.layer === "players" && view.tab === "shots" ? (
+        <Section
+          id="shots"
+          index="Players  /  Shots"
+          title="Field-goal map"
+          lede={shotLede(shots, current)}
+          source="Free throws are off the court."
+        >
+          <ShotChart shots={shots} initialPlayer={query.player ?? ""} />
+        </Section>
+      ) : null}
     </main>
   );
+}
+
+function LatestGame({ latest }: { latest: LatestView }) {
+  return (
+    <div>
+      <p className="text-[11px] uppercase tracking-[0.14em] text-muted">Latest game</p>
+      <h3 className="mt-2 text-[22px] font-bold leading-tight">
+        <Link href={`/games/${latest.id}`} className="text-ink">
+          Knicks {latest.knicksScore}, {latest.opponentName} {latest.opponentScore}
+        </Link>
+      </h3>
+      <p className="mt-2 text-[14px] text-muted">
+        {etDate(latest.date)} · {place(latest.home, latest.neutral)} {latest.opponentAbbr} · {latest.venue}
+        {latest.series ? ` · ${latest.series}` : ""}
+      </p>
+      <div className="mt-6 overflow-x-auto">
+        <table className="w-full min-w-[520px] border-collapse text-left">
+          <thead>
+            <tr className="border-b border-rule text-[11px] uppercase tracking-[0.14em] text-muted">
+              <th className="py-2 pr-3 font-normal">Team</th>
+              {latest.quarters.map((quarter) => (
+                <th key={quarter.period} className="px-2 py-2 text-right font-normal">
+                  {quarter.label}
+                </th>
+              ))}
+              <th className="px-2 py-2 text-right font-normal">Final</th>
+            </tr>
+          </thead>
+          <tbody className="tabular text-[15px]">
+            <tr className="border-b border-rule">
+              <td className="py-2 pr-3">Knicks</td>
+              {latest.quarters.map((quarter) => (
+                <td key={quarter.period} className="px-2 py-2 text-right">
+                  {quarter.knicks}
+                </td>
+              ))}
+              <td className="px-2 py-2 text-right font-bold">{latest.knicksScore}</td>
+            </tr>
+            <tr className="border-b border-rule">
+              <td className="py-2 pr-3">{latest.opponentAbbr}</td>
+              {latest.quarters.map((quarter) => (
+                <td key={quarter.period} className="px-2 py-2 text-right">
+                  {quarter.opponent}
+                </td>
+              ))}
+              <td className="px-2 py-2 text-right">{latest.opponentScore}</td>
+            </tr>
+            <tr>
+              <td className="py-2 pr-3 text-muted">Margin</td>
+              {latest.quarters.map((quarter) => (
+                <td key={quarter.period} className="px-2 py-2 text-right text-muted">
+                  {signed(quarter.margin, 0)}
+                </td>
+              ))}
+              <td className="px-2 py-2 text-right text-muted">{signed(latest.knicksScore - latest.opponentScore, 0)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function shotLede(shots: ShotDot[], current: SeasonView | null): string {
+  const slice = current
+    ? shots.filter((shot) => shot.season === current.season && shot.phase === current.phase)
+    : shots;
+  const makes = slice.filter((shot) => shot.made).length;
+  const misses = slice.length - makes;
+  if (slice.length === 0) return "Each dot is an attempt. Orange is a make. A ring is a miss.";
+  const scope = current ? "this season" : "in the snapshot";
+  return `${record(makes, misses)} ${scope}, ${((100 * makes) / slice.length).toFixed(1)}%. Each dot is an attempt.`;
+}
+
+function shotDots(store: Store): ShotDot[] {
+  const names = new Map<string, string>();
+  for (const game of store.games) {
+    for (const row of game.players) names.set(row.id, row.name);
+  }
+  const shots: ShotDot[] = [];
+  for (const game of store.games) {
+    for (const shot of game.shots ?? []) {
+      shots.push({
+        ...shot,
+        name: names.get(shot.playerId) ?? "Knick",
+        season: game.season,
+        phase: game.phase,
+      });
+    }
+  }
+  return shots;
 }
 
 function SeasonTiles({ current, previous }: { current: SeasonView; previous: SeasonView | null }) {

@@ -706,11 +706,10 @@ function buildHero(current: SeasonView | null, previous: SeasonView | null, cham
     stories[0] && stories[0].score >= 1
       ? stories[0].title
       : `Net ${signed(current.ratings.net)}, was ${signed(previous.ratings.net)}`;
-  const bits = [
-    current.ratings.games < 20 ? `${current.ratings.games} games. One night still moves the rate.` : `${current.ratings.games} games.`,
-    champion ? `Finals ${record(champion.wins, champion.losses)}, ${champion.opponent}.` : "",
-  ].filter(Boolean);
-  return { kicker, title, body: bits.join(" ") };
+  const body = champion
+    ? `${current.ratings.games} games. Finals ${record(champion.wins, champion.losses)} vs ${champion.opponent}.`
+    : `${current.ratings.games} games. Offense ${current.ratings.ortg.toFixed(1)}, defense ${current.ratings.drtg.toFixed(1)}.`;
+  return { kicker, title, body };
 }
 
 function sectionNotes(current: SeasonView | null, previous: SeasonView | null, players: PlayerRollup[]): Report["notes"] {
@@ -718,7 +717,7 @@ function sectionNotes(current: SeasonView | null, previous: SeasonView | null, p
     ? "Waiting on a completed game."
     : !previous
       ? `${record(current.ratings.wins, current.ratings.losses)}, margin ${signed(current.ratings.margin)}.`
-      : `Net ${signed(current.ratings.net)}. Last year ${signed(previous.ratings.net)}.`;
+      : `${record(current.ratings.wins, current.ratings.losses)}, net ${signed(current.ratings.net)}. Last year ${signed(previous.ratings.net)}.`;
 
   let quarters = "Margin by period.";
   if (current) {
@@ -731,7 +730,7 @@ function sectionNotes(current: SeasonView | null, previous: SeasonView | null, p
     }
   }
 
-  const factors = "Per 100 possessions. Olive helps. Rose hurts. Pace is unmarked.";
+  const factors = "Change from last regular season.";
 
   let situations = "Small samples move fast.";
   if (current) {
@@ -746,9 +745,11 @@ function sectionNotes(current: SeasonView | null, previous: SeasonView | null, p
     if (bits.length) situations = bits.join(" ");
   }
 
-  const currentPlayers = players.filter((player) => current && player.season === current.season && player.phase === current.phase && player.impact.kind !== "limited");
+  const currentPlayers = players.filter((player) => current && player.season === current.season && player.phase === current.phase && player.minutes >= 150);
   const ranked = currentPlayers.filter((player) => player.onOff != null).sort((a, b) => (b.onOff ?? 0) - (a.onOff ?? 0));
-  const playersNote = ranked[0] ? `${lastName(ranked[0].name)} ${signed(ranked[0].onOff ?? 0)} on/off.` : "On-court margin.";
+  const playersNote = ranked[0]
+    ? `${lastName(ranked[0].name)} ${signed(ranked[0].onOff ?? 0)} on/off, the largest swing.`
+    : "On-court margin minus the bench.";
 
   return { season, quarters, factors, situations, players: playersNote, pairs: "Both on the floor. Margin per 48." };
 }
@@ -857,6 +858,28 @@ function pairBoards(games: Game[], seasons: SeasonView[], players: PlayerRollup[
     });
 }
 
+function shortFactor(label: string): string {
+  return label
+    .replace(/^Opponent /, "Opp ")
+    .replace(/effective field-goal %/i, "eFG%")
+    .replace(/turnover rate/i, "TOV%")
+    .replace(/offensive rebound rate/i, "ORB%")
+    .replace(/free-throw rate/i, "FT rate")
+    .replace(/points in the paint/i, "paint")
+    .replace(/fast-break points/i, "fast break")
+    .replace(/points off turnovers/i, "points off TO");
+}
+
+function factorNote(rows: FactorRow[]): string {
+  const pool = rows.filter((row) => row.group !== "Scoring" && row.shift != null && row.tone !== "none");
+  if (pool.length === 0) return "Change from last regular season.";
+  const ranked = pool.slice().sort((a, b) => Math.abs(b.shift ?? 0) - Math.abs(a.shift ?? 0));
+  const lead = ranked[0];
+  const other = ranked.find((row) => row.tone !== lead.tone) ?? ranked[1];
+  const bit = (row: FactorRow) => `${shortFactor(row.label)} ${row.delta}`;
+  return other ? `${bit(lead)}. ${bit(other)}.` : `${bit(lead)}.`;
+}
+
 export function buildReport(store: Store): Report {
   const games = store.games.slice().sort((a, b) => a.date.localeCompare(b.date));
   const keys = new Map<string, { season: string; phase: Phase }>();
@@ -872,6 +895,8 @@ export function buildReport(store: Store): Report {
   const pairs = pairBoards(games, seasons, players);
   const champion = championOf(games);
   const notes = sectionNotes(current, previous, players);
+  const factors = factorRows(current?.ratings ?? null, previous?.ratings ?? null);
+  notes.factors = factorNote(factors);
   const currentPairs = pairs.find((board) => current && board.id === `${current.season}:${current.phase}`);
   if (currentPairs && currentPairs.cells.length > 0) notes.pairs = currentPairs.note;
   return {
@@ -884,7 +909,7 @@ export function buildReport(store: Store): Report {
     previous,
     playoffs,
     seasons,
-    factors: factorRows(current?.ratings ?? null, previous?.ratings ?? null),
+    factors,
     players,
     pairs,
     latest: latestView(games),

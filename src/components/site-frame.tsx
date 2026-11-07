@@ -1,19 +1,9 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { IngestControl } from "@/components/ingest-control";
+import { LayerNav } from "@/components/layer-nav";
 import { KnicksMark, Liberty } from "@/components/marks";
 import { etDateTime } from "@/lib/format";
-
-const LINKS = [
-  { href: "/#season", label: "Season" },
-  { href: "/#games", label: "Game to game" },
-  { href: "/#quarters", label: "Quarters" },
-  { href: "/#factors", label: "Offense and defense" },
-  { href: "/#situations", label: "Situations" },
-  { href: "/#pairs", label: "Pairings" },
-  { href: "/shots", label: "Shots" },
-  { href: "/players", label: "Players" },
-];
 
 export function SiteHeader({ checkedAt }: { checkedAt: string }) {
   return (
@@ -33,13 +23,9 @@ export function SiteHeader({ checkedAt }: { checkedAt: string }) {
           <IngestControl checkedAt={checkedAt} />
         </div>
       </div>
-      <nav className="mx-auto flex max-w-[1080px] flex-wrap gap-x-5 gap-y-2 px-5 py-3 text-[13px] text-muted">
-        {LINKS.map((link) => (
-          <Link key={link.href} href={link.href} className="shrink-0 text-ink no-underline hover:underline">
-            {link.label}
-          </Link>
-        ))}
-      </nav>
+      <Suspense fallback={<div className="h-16 border-t border-rule" />}>
+        <LayerNav />
+      </Suspense>
     </header>
   );
 }
@@ -48,8 +34,8 @@ export function SiteFooter({ updatedAt }: { updatedAt: string }) {
   return (
     <footer className="mx-auto max-w-[1080px] px-5 py-10 text-[12px] leading-relaxed text-muted">
       <p>
-        ESPN box scores and play-by-play. Ratings are points per 100 possessions. On-court splits keep a game when the
-        lineup replay is within 8 points of the box plus-minus. Updated {etDateTime(updatedAt)}.
+        ESPN box scores and play-by-play. Ratings are points per 100 possessions. Lineup splits keep a game within 8
+        points of the box plus-minus. Updated {etDateTime(updatedAt)}.
       </p>
     </footer>
   );

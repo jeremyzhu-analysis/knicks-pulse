@@ -1,6 +1,6 @@
 # Knicks game to game
 
-A day-by-day report on the New York Knicks. It compares last season with this one, then splits offense and defense by quarter, situation, and player.
+A day-by-day report on the New York Knicks. Team holds the season, games, quarters, offense and defense, and situations. Players holds impact, pairings, and the shot map.
 
 The page is a black, Arial report in the spirit of a Pew Research chart: a finding up top, the number under it, and a source line. It is not a broadcast graphic.
 

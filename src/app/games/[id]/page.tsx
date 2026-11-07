@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { FlowChart } from "@/components/charts";
 import { rateGames } from "@/lib/analytics";
 import { etDate, fixed, pct, place, signed } from "@/lib/format";
+import { hrefFor } from "@/lib/nav";
 import { gameScore } from "@/lib/metrics";
 import { readStore } from "@/lib/store";
 import type { PlayerGame } from "@/lib/types";
@@ -33,8 +34,8 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
   return (
     <main className="mx-auto max-w-[1080px] px-5 py-10">
       <p className="text-[11px] uppercase tracking-[0.18em] text-muted">
-        <Link href="/#games" className="text-muted">
-          Game to game
+        <Link href={hrefFor("team", "games")} className="text-muted">
+          Games
         </Link>
         {"  /  "}
         {game.season} {game.phase === "playoffs" ? "playoffs" : "regular season"}
@@ -47,12 +48,9 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
         {game.attendance ? ` · ${game.attendance.toLocaleString("en-US")} attendance` : ""}
         {game.series ? ` · ${game.series}` : ""}
       </p>
-      <p className="mt-4 max-w-[68ch] text-[17px] leading-[1.55]">
-        The Knicks {game.win ? "won" : "lost"} by {Math.abs(game.knicksScore - game.opponentScore)}. Offensive rating{" "}
-        {fixed(ratings.ortg)}, defensive rating {fixed(ratings.drtg)}, net {signed(ratings.net)}.
-        {swing
-          ? ` The largest quarter swing was ${swing.label}, ${signed(swing.margin, 0)} (${swing.knicks}–${swing.opponent}).`
-          : ""}
+      <p className="mt-4 max-w-[42ch] text-[17px] leading-snug">
+        {game.win ? "Win" : "Loss"} by {Math.abs(game.knicksScore - game.opponentScore)}. Offense {fixed(ratings.ortg)}, defense{" "}
+        {fixed(ratings.drtg)}.{swing ? ` ${swing.label} ${signed(swing.margin, 0)}.` : ""}
       </p>
 
       <div className="mt-8 overflow-x-auto">
@@ -102,9 +100,7 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
 
       <section className="mt-10 border-t border-rule pt-8">
         <h2 className="text-[22px] font-bold">Margin through the game</h2>
-        <p className="mt-3 max-w-[68ch] text-[15px] text-muted">
-          The line moves only when the score changes. Above zero, the Knicks are ahead.
-        </p>
+        <p className="mt-3 text-[15px] text-muted">The line moves when the score changes. Above zero, the Knicks lead.</p>
         <div className="mt-4">
           <FlowChart flow={game.flow} />
         </div>
@@ -147,8 +143,7 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
         <h2 className="text-[22px] font-bold">Knicks, and the quarter the points came from</h2>
         {game.lineupError > 1 ? (
           <p className="mt-3 text-[13px] text-loss">
-            Substitution replay disagreed with the box plus-minus by {game.lineupError} points, so on-court splits for
-            this game are left out of season totals.
+            Lineup replay missed the box plus-minus by {game.lineupError}, so this game is out of the season on-court splits.
           </p>
         ) : null}
         <div className="mt-4 overflow-x-auto">
@@ -158,9 +153,7 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
 
       <section className="mt-10 border-t border-rule pt-8">
         <h2 className="text-[22px] font-bold">The other side</h2>
-        <p className="mt-3 max-w-[68ch] text-[15px] text-muted">
-          Opponent lines are the box score only. Quarter impact is tracked for Knicks players.
-        </p>
+        <p className="mt-3 text-[15px] text-muted">Box score only. Quarter points are tracked for Knicks players.</p>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[640px] border-collapse text-left">
             <thead>

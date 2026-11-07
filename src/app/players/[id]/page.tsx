@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { buildReport, playerGames, type PlayerRollup } from "@/lib/analytics";
 import { etDate, fixed, lastName, pct, place, record, signed } from "@/lib/format";
+import { hrefFor } from "@/lib/nav";
 import { gameScore } from "@/lib/metrics";
 import { readStore } from "@/lib/store";
 
@@ -28,7 +29,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
   return (
     <main className="mx-auto max-w-[1080px] px-5 py-10">
       <p className="text-[11px] uppercase tracking-[0.18em] text-muted">
-        <Link href="/players" className="text-muted">
+        <Link href={hrefFor("players", "impact")} className="text-muted">
           Players
         </Link>
         {"  /  "}
@@ -36,7 +37,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
       </p>
       <h1 className="mt-2 text-[36px] font-bold leading-none md:text-[44px]">{name}</h1>
       <p className="mt-3 text-[14px]">
-        <Link href={`/shots?player=${id}`} className="text-ink">
+        <Link href={hrefFor("players", "shots", id)} className="text-ink">
           Shot map
         </Link>
       </p>
@@ -80,10 +81,8 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
 
       <section className="mt-10 border-t border-rule pt-8">
         <h2 className="text-[22px] font-bold">By quarter</h2>
-        <p className="mt-3 max-w-[68ch] text-[15px] leading-relaxed text-muted">
-          Points are the average play-by-play points in that quarter on nights {lastName(name)} played it. Plus-minus
-          is the Knicks&apos; margin while on the floor in that quarter. Opponent points per 48 are the defensive half
-          of the same minutes.
+        <p className="mt-3 max-w-[42ch] text-[15px] text-muted">
+          Average points, and the Knicks&apos; margin with {lastName(name)} on the floor.
         </p>
         <div className="mt-5 overflow-x-auto">
           <QuarterSplit lines={lines} />
@@ -94,7 +93,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
         {lines.slice(0, 2).map((line) => (
           <div key={line.season + line.phase}>
             <h2 className="text-[18px] font-bold">
-              On the floor vs. on the bench · {line.season} {line.phase === "playoffs" ? "playoffs" : ""}
+              On the floor · {line.season} {line.phase === "playoffs" ? "playoffs" : "regular"}
             </h2>
             <dl className="mt-4 grid grid-cols-2 gap-px bg-rule">
               <Stat label="Knicks pts / 48, on" value={line.teamPts48On == null ? "—" : fixed(line.teamPts48On)} />
@@ -153,9 +152,8 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-[12px] text-muted">
-          {lastName(name)}&apos;s game score in the most recent appearance was {latestScore(games, id)}. The Knicks were{" "}
-          {record(games.filter((game) => game.win).length, games.filter((game) => !game.win).length)} in these games.
+        <p className="mt-3 text-[13px] text-muted">
+          Last game score {latestScore(games, id)}. Knicks {record(games.filter((game) => game.win).length, games.filter((game) => !game.win).length)} in these games.
         </p>
       </section>
     </main>
