@@ -106,6 +106,16 @@ export interface CourtPair {
   opp: number;
 }
 
+/** A Knicks field-goal attempt. x is 0–50, y is feet from the rim (negative is the corner). */
+export interface Shot {
+  playerId: string;
+  period: number;
+  x: number;
+  y: number;
+  made: boolean;
+  value: 2 | 3;
+}
+
 export interface Game {
   id: string;
   season: string;
@@ -133,6 +143,8 @@ export interface Game {
   lineupError: number;
   /** Shared on-court time for each Knicks pairing. Missing on older snapshots. */
   pairs?: CourtPair[];
+  /** Field-goal attempts with court coordinates. Free throws are left out. */
+  shots?: Shot[];
 }
 
 export interface Store {

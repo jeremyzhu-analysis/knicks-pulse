@@ -4,7 +4,7 @@ import {
   periodLength,
   quarterLabel,
 } from "@/lib/clock";
-import { KNICKS_TEAM_ID, type Game, type GameMeta, type PlayerGame, type PlayerQuarter, type TeamBox } from "@/lib/types";
+import { KNICKS_TEAM_ID, type Game, type GameMeta, type PlayerGame, type PlayerQuarter, type Shot, type TeamBox } from "@/lib/types";
 
 type Dict = Record<string, unknown>;
 
@@ -195,6 +195,36 @@ function bump(map: Map<string, Map<number, PlayerQuarter>>, id: string, period: 
  * because ESPN sequence numbers can land a next-quarter sub ahead of a late
  * review in the previous quarter.
  */
+function extractShots(plays: unknown[]): Shot[] {
+  const shots: Shot[] = [];
+  for (const raw of plays) {
+    const play = rec(raw);
+    if (!play.shootingPlay) continue;
+    if (str(rec(play.team).id) !== KNICKS_TEAM_ID) continue;
+    const typeText = str(rec(play.type).text);
+    const text = str(play.text);
+    if (/free throw/i.test(typeText) || /free throw/i.test(text)) continue;
+    const coord = rec(play.coordinate);
+    if (typeof coord.x !== "number" || typeof coord.y !== "number") continue;
+    const x = coord.x;
+    const y = coord.y;
+    if (x < -2 || x > 52 || y < -8 || y > 45) continue;
+    const playerId = arr(play.participants).map((part) => str(rec(rec(part).athlete).id)).find(Boolean);
+    if (!playerId) continue;
+    const made = Boolean(play.scoringPlay);
+    const value: 2 | 3 = /three/i.test(text) || num(play.pointsAttempted) === 3 ? 3 : 2;
+    shots.push({
+      playerId,
+      period: num(rec(play.period).number) || 1,
+      x,
+      y,
+      made,
+      value,
+    });
+  }
+  return shots;
+}
+
 function replayPlays(
   plays: unknown[],
   listed: ListedPlayer[],
@@ -446,7 +476,9 @@ export function parseSummary(raw: unknown, meta: GameMeta): Game {
   const oppTeam = teamRows.find((item) => str(rec(item.team).id) !== KNICKS_TEAM_ID);
 
   const listed = parseListedPlayers(boxscore);
-  const { lineupError, flow, pairs } = replayPlays(arr(root.plays), listed, knicksHome);
+  const plays = arr(root.plays);
+  const { lineupError, flow, pairs } = replayPlays(plays, listed, knicksHome);
+  const shots = extractShots(plays);
 
   const info = rec(root.gameInfo);
   const venue = rec(info.venue);
@@ -482,5 +514,6 @@ export function parseSummary(raw: unknown, meta: GameMeta): Game {
     flow,
     lineupError,
     pairs,
+    shots,
   };
 }

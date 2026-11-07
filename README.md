@@ -11,6 +11,7 @@ The page is a black, Arial report in the spirit of a Pew Research chart: a findi
 - **Situations:** home, road, back-to-backs, rest, and the game after a win or a loss.
 - **Players:** scoring, creation, rebounding, rim protection, and disruption, plus the Knicks' margin and the opponent's scoring rate with that player on the floor and on the bench. Quarter points come from the play-by-play.
 - **Pairings:** a heatmap of the Knicks' margin per 48 minutes while two players share the floor.
+- **Shots:** every Knicks field-goal attempt on a half court. A filled dot is a make. An open dot is a miss. Free throws are excluded.
 
 Ratings use a box-score possession estimate: field-goal attempts minus offensive rebounds plus turnovers plus 0.44 times free-throw attempts. On-court splits replay substitutions. A game stays in the split when that replay is within 8 points of the official plus-minus. Preseason is not included.
 

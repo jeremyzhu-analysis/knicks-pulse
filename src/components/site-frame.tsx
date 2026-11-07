@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/#factors", label: "Offense and defense" },
   { href: "/#situations", label: "Situations" },
   { href: "/#pairs", label: "Pairings" },
+  { href: "/shots", label: "Shots" },
   { href: "/players", label: "Players" },
 ];
 

@@ -226,6 +226,7 @@ export async function buildSummaryFromCore(eventId: string): Promise<unknown> {
         scoreValue: row.scoreValue,
         shootingPlay: row.shootingPlay,
         pointsAttempted: row.pointsAttempted,
+        coordinate: row.coordinate,
         team: { id: idFromRef(rec(row.team).$ref) },
         participants: participants.map((part) => ({ athlete: { id: idFromRef(rec(part.athlete).$ref) } })),
       };

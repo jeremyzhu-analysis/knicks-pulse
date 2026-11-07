@@ -211,6 +211,10 @@ export default function HomePage() {
           <Link href="/players" className="text-ink">
             All players, both seasons
           </Link>
+          <span className="mx-3 text-faint">/</span>
+          <Link href="/shots" className="text-ink">
+            Shot map
+          </Link>
         </p>
       </Section>
 

@@ -35,6 +35,11 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
         {lead?.position}
       </p>
       <h1 className="mt-2 text-[36px] font-bold leading-none md:text-[44px]">{name}</h1>
+      <p className="mt-3 text-[14px]">
+        <Link href={`/shots?player=${id}`} className="text-ink">
+          Shot map
+        </Link>
+      </p>
       <p className="mt-3 text-[13px] uppercase tracking-[0.14em] text-knicks">{lead?.impact.title}</p>
       <p className="mt-4 max-w-[68ch] text-[18px] leading-[1.55]">{lead?.impact.sentence}</p>
 
