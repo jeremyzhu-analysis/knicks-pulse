@@ -19,7 +19,7 @@ export function SiteHeader({ checkedAt }: { checkedAt: string }) {
           </div>
         </div>
         <div className="flex items-end gap-4">
-          <Liberty className="h-24 w-auto shrink-0" />
+          <Liberty className="h-28 w-auto shrink-0" />
           <IngestControl checkedAt={checkedAt} />
         </div>
       </div>

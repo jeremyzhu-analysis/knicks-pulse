@@ -269,7 +269,7 @@ function page(): string {
   header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; border-bottom: 1px solid #2a2a2a; padding: 20px 0 12px; }
   .brand { display: flex; gap: 12px; align-items: center; }
   .mark { width: 48px; height: 48px; }
-  .liberty { height: 96px; width: auto; }
+  .liberty { height: 112px; width: auto; }
   nav { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 12px 0 4px; }
   nav a { color: #f4f1ea; font-size: 13px; text-decoration: none; }
   h1 { font-size: 40px; line-height: 1.12; margin: 8px 0 0; max-width: 16em; }
