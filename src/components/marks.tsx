@@ -11,41 +11,60 @@ export function KnicksMark({ className }: { className?: string }) {
   );
 }
 
-const LIBERTY = [
-  "......F.......",
-  ".....FFF......",
-  "......T.......",
-  "......T.......",
-  "....S.S.S.....",
-  ".....S.S......",
-  ".....GGG......",
-  "....G.G.G.....",
-  "....GGGGG.....",
-  "....GGWGG.....",
-  ".....GWG......",
-  ".....GGG......",
-  "....GGGGG.....",
-  "....GGGGG.....",
-  "....GGGGG.....",
-  "....GGGGG.....",
-  "...GGGGGGG....",
-  "...GGGGGGG....",
-  "..GGGGGGGGG...",
-  "..DDDDDDDDD...",
+/** Pixel Statue of Liberty. Torch on her right, seven crown rays, tablet on her left. */
+export const LIBERTY_ROWS = [
+  "..Y...................",
+  ".fYF..................",
+  ".fYF..................",
+  "..tt..................",
+  "tTTt..................",
+  ".tt.........C.........",
+  ".tt.......C.C.C.......",
+  ".tt.....C.C.C.C.C.....",
+  ".aa...C.C.C.C.C.C.C...",
+  ".aa...CCCCCCCCCCCCC...",
+  ".aa...CCnnCnnCnnCC....",
+  ".aa......kkkkkkk......",
+  ".aa......kkekekk......",
+  ".aa......kkkkkkk......",
+  ".ggggggggggggg........",
+  ".gGggggggggggG........",
+  ".ggggggggggggg........",
+  ".ggggdggdggggg........",
+  ".gggggggggggWW........",
+  ".gGgggggggggWw........",
+  ".gggggggggggWW........",
+  "..ggggggggggg.........",
+  "..ppppppppppp.........",
+  ".BBBBBBBBBBBBB........",
+  ".bbbbbbbbbbbbb........",
+  "..bbbbbbbbbbb.........",
 ];
 
-const PIXEL: Record<string, string> = {
-  F: "#e07a3d",
-  T: "#c4a574",
-  S: "#d7dece",
-  G: "#8eae78",
-  W: "#f4f1ea",
-  D: "#3e5234",
+export const LIBERTY_PIXEL: Record<string, string> = {
+  Y: "#ffe1a8",
+  F: "#ffb15a",
+  f: "#e07a3d",
+  t: "#b8894e",
+  T: "#f0ddb0",
+  C: "#d5e4c4",
+  n: "#141414",
+  a: "#9bb888",
+  k: "#f0d2a8",
+  e: "#1a140e",
+  g: "#7ea06e",
+  G: "#d7e6c4",
+  d: "#3e5a36",
+  W: "#f7f4ee",
+  w: "#8a847c",
+  p: "#6d8f5e",
+  B: "#5c5c5c",
+  b: "#2a2a2a",
 };
 
 export function Liberty({ className }: { className?: string }) {
-  const cols = LIBERTY[0]?.length ?? 0;
-  const rows = LIBERTY.length;
+  const cols = LIBERTY_ROWS[0]?.length ?? 0;
+  const rows = LIBERTY_ROWS.length;
   const size = 4;
   return (
     <svg
@@ -55,9 +74,9 @@ export function Liberty({ className }: { className?: string }) {
       aria-label="Pixel Statue of Liberty"
       shapeRendering="crispEdges"
     >
-      {LIBERTY.flatMap((row, y) =>
+      {LIBERTY_ROWS.flatMap((row, y) =>
         [...row].map((cell, x) => {
-          const fill = PIXEL[cell];
+          const fill = LIBERTY_PIXEL[cell];
           if (!fill) return null;
           return <rect key={`${x}-${y}`} x={x * size} y={y * size} width={size} height={size} fill={fill} />;
         }),

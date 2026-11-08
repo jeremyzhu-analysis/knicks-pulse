@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { heatStyle } from "../src/components/heat";
+import { LIBERTY_PIXEL, LIBERTY_ROWS } from "../src/components/marks";
 import { buildReport, type FactorRow, type GameStub, type PairBoard, type PlayerRollup, type SeasonView } from "../src/lib/analytics";
 import { etDate, etDateTime, fixed, place, record, signed } from "../src/lib/format";
 import { readStore } from "../src/lib/store";
@@ -19,36 +20,12 @@ function styleAttr(style: { background: string; color: string }): string {
 
 const MARK = `<svg class="mark" viewBox="0 0 64 64" role="img" aria-label="New York Knicks"><circle cx="32" cy="32" r="30" fill="#006BB6"/><circle cx="32" cy="32" r="27" fill="none" stroke="#F58426" stroke-width="2.5"/><path d="M32 8c2 6 2 10 0 16M32 40c-2 6-2 10 0 16M8 32c6-2 10-2 16 0M40 32c6 2 10 2 16 0" fill="none" stroke="#F58426" stroke-width="1.2" opacity="0.7"/><text x="32" y="39" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="20" fill="#F58426">NY</text></svg>`;
 
-const LIBERTY_ROWS = [
-  "......F.......",
-  ".....FFF......",
-  "......T.......",
-  "......T.......",
-  "....S.S.S.....",
-  ".....S.S......",
-  ".....GGG......",
-  "....G.G.G.....",
-  "....GGGGG.....",
-  "....GGWGG.....",
-  ".....GWG......",
-  ".....GGG......",
-  "....GGGGG.....",
-  "....GGGGG.....",
-  "....GGGGG.....",
-  "....GGGGG.....",
-  "...GGGGGGG....",
-  "...GGGGGGG....",
-  "..GGGGGGGGG...",
-  "..DDDDDDDDD...",
-];
-const PIXEL: Record<string, string> = { F: "#e07a3d", T: "#c4a574", S: "#d7dece", G: "#8eae78", W: "#f4f1ea", D: "#3e5234" };
-
 function liberty(): string {
   const size = 4;
   const cols = LIBERTY_ROWS[0]?.length ?? 0;
   const rects = LIBERTY_ROWS.flatMap((row, y) =>
     [...row].flatMap((cell, x) => {
-      const fill = PIXEL[cell];
+      const fill = LIBERTY_PIXEL[cell];
       return fill ? [`<rect x="${x * size}" y="${y * size}" width="${size}" height="${size}" fill="${fill}"/>`] : [];
     }),
   ).join("");
@@ -292,7 +269,7 @@ function page(): string {
   header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; border-bottom: 1px solid #2a2a2a; padding: 20px 0 12px; }
   .brand { display: flex; gap: 12px; align-items: center; }
   .mark { width: 48px; height: 48px; }
-  .liberty { width: 56px; height: 80px; }
+  .liberty { height: 96px; width: auto; }
   nav { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 12px 0 4px; }
   nav a { color: #f4f1ea; font-size: 13px; text-decoration: none; }
   h1 { font-size: 40px; line-height: 1.12; margin: 8px 0 0; max-width: 16em; }
