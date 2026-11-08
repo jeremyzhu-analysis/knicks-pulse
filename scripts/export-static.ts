@@ -1,7 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { heatStyle } from "../src/components/heat";
-import { LIBERTY_PIXEL, LIBERTY_ROWS } from "../src/components/marks";
 import { buildReport, type FactorRow, type GameStub, type PairBoard, type PlayerRollup, type SeasonView } from "../src/lib/analytics";
 import { etDate, etDateTime, fixed, place, record, signed } from "../src/lib/format";
 import { readStore } from "../src/lib/store";
@@ -19,18 +18,6 @@ function styleAttr(style: { background: string; color: string }): string {
 }
 
 const MARK = `<svg class="mark" viewBox="0 0 64 64" role="img" aria-label="New York Knicks"><circle cx="32" cy="32" r="30" fill="#006BB6"/><circle cx="32" cy="32" r="27" fill="none" stroke="#F58426" stroke-width="2.5"/><path d="M32 8c2 6 2 10 0 16M32 40c-2 6-2 10 0 16M8 32c6-2 10-2 16 0M40 32c6 2 10 2 16 0" fill="none" stroke="#F58426" stroke-width="1.2" opacity="0.7"/><text x="32" y="39" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="20" fill="#F58426">NY</text></svg>`;
-
-function liberty(): string {
-  const size = 4;
-  const cols = LIBERTY_ROWS[0]?.length ?? 0;
-  const rects = LIBERTY_ROWS.flatMap((row, y) =>
-    [...row].flatMap((cell, x) => {
-      const fill = LIBERTY_PIXEL[cell];
-      return fill ? [`<rect x="${x * size}" y="${y * size}" width="${size}" height="${size}" fill="${fill}"/>`] : [];
-    }),
-  ).join("");
-  return `<svg class="liberty" viewBox="0 0 ${cols * size} ${LIBERTY_ROWS.length * size}" role="img" aria-label="Pixel Statue of Liberty" shape-rendering="crispEdges">${rects}</svg>`;
-}
 
 function marginSvg(games: GameStub[]): string {
   const width = 860;
@@ -258,7 +245,7 @@ function page(): string {
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Knicks game to game</title>
+<title>New York Knicks</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -269,7 +256,6 @@ function page(): string {
   header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; border-bottom: 1px solid #2a2a2a; padding: 20px 0 12px; }
   .brand { display: flex; gap: 12px; align-items: center; }
   .mark { width: 48px; height: 48px; }
-  .liberty { height: 112px; width: auto; }
   nav { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 12px 0 4px; }
   nav a { color: #f4f1ea; font-size: 13px; text-decoration: none; }
   h1 { font-size: 40px; line-height: 1.12; margin: 8px 0 0; max-width: 16em; }
@@ -326,12 +312,11 @@ function page(): string {
 </head>
 <body>
 <header>
-  <div class="brand">${MARK}<div><p class="kicker">New York Knicks</p><strong>Game to game</strong><p class="note">Static snapshot</p></div></div>
-  ${liberty()}
+  <div class="brand">${MARK}<div><strong>New York Knicks</strong><p class="note">Static snapshot</p></div></div>
 </header>
 <main>
 <nav>
-  <a href="#season">Season</a><a href="#games">Game to game</a><a href="#quarters">Quarters</a>
+  <a href="#season">Season</a><a href="#games">Games</a><a href="#quarters">Quarters</a>
   <a href="#factors">Offense and defense</a><a href="#situations">Situations</a><a href="#pairs">Pairings</a><a href="#players">Players</a>
 </nav>
 <section>
@@ -348,7 +333,7 @@ ${latestBlock}
   <div class="cards">${seasonCards}</div>
 </section>
 <section id="games">
-  <p class="kicker">02 / Game to game</p>
+  <p class="kicker">02 / Games</p>
   <h2>The margin, one night at a time</h2>
   <p>Dot is the final margin. Line is the running average.</p>
   ${switches(views, active)}

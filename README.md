@@ -1,4 +1,4 @@
-# Knicks game to game
+# New York Knicks
 
 A day-by-day report on the New York Knicks. Team holds the season, games, quarters, offense and defense, and situations. Players holds impact, pairings, and the shot map.
 

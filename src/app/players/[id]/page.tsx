@@ -9,7 +9,7 @@ import { readStore } from "@/lib/store";
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const player = buildReport(readStore()).players.find((row) => row.id === id);
-  return { title: player ? `${player.name} · Knicks game to game` : "Player · Knicks game to game" };
+  return { title: player ? `${player.name} · New York Knicks` : "Player · New York Knicks" };
 }
 
 export default async function PlayerPage({ params }: { params: Promise<{ id: string }> }) {

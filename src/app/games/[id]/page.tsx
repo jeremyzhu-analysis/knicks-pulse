@@ -11,8 +11,8 @@ import type { PlayerGame } from "@/lib/types";
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const game = readStore().games.find((row) => row.id === id);
-  if (!game) return { title: "Game · Knicks game to game" };
-  return { title: `Knicks ${game.knicksScore}, ${game.opponentAbbr} ${game.opponentScore} · Knicks game to game` };
+  if (!game) return { title: "Game · New York Knicks" };
+  return { title: `Knicks ${game.knicksScore}, ${game.opponentAbbr} ${game.opponentScore} · New York Knicks` };
 }
 
 export default async function GamePage({ params }: { params: Promise<{ id: string }> }) {

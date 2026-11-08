@@ -2,26 +2,18 @@ import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 import { IngestControl } from "@/components/ingest-control";
 import { LayerNav } from "@/components/layer-nav";
-import { KnicksMark, Liberty } from "@/components/marks";
+import { KnicksMark } from "@/components/marks";
 import { etDateTime } from "@/lib/format";
 
 export function SiteHeader({ checkedAt }: { checkedAt: string }) {
   return (
     <header className="border-b border-rule">
-      <div className="mx-auto flex max-w-[1080px] flex-col gap-4 px-5 py-4 md:flex-row md:items-end md:justify-between">
-        <div className="flex items-center gap-3">
+      <div className="mx-auto flex max-w-[1080px] flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:justify-between">
+        <Link href="/" className="flex items-center gap-3 text-ink no-underline">
           <KnicksMark className="h-12 w-12 shrink-0" />
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.18em] text-muted">New York Knicks</p>
-            <Link href="/" className="mt-1 block text-[22px] leading-none text-ink no-underline">
-              Game to game
-            </Link>
-          </div>
-        </div>
-        <div className="flex items-end gap-4">
-          <Liberty className="h-28 w-auto shrink-0" />
-          <IngestControl checkedAt={checkedAt} />
-        </div>
+          <span className="text-[26px] font-bold leading-none md:text-[32px]">New York Knicks</span>
+        </Link>
+        <IngestControl checkedAt={checkedAt} />
       </div>
       <Suspense fallback={<div className="h-16 border-t border-rule" />}>
         <LayerNav />

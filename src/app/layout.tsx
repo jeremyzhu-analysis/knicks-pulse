@@ -6,7 +6,7 @@ import "./globals.css";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Knicks game to game",
+  title: "New York Knicks",
   description:
     "Quarter-by-quarter offense and defense for the New York Knicks, from last season through the latest game.",
 };
