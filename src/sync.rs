@@ -6,6 +6,7 @@ use sqlx::{MySql, QueryBuilder, Transaction};
 
 use crate::config::TEAM_SLUG;
 use crate::espn::{Espn, EspnHttpError, GameSummary, PLAYOFFS, REGULAR_SEASON};
+use crate::report::dates::new_york;
 
 pub struct SyncResult {
     pub completed: usize,
@@ -46,6 +47,7 @@ pub async fn sync_games(pool: &MySqlPool, espn: &Espn, log: impl Fn(&str)) -> Re
         missing.len()
     ));
 
+    let new_york = new_york()?;
     let mut added = 0;
     for id in missing {
         let game = match espn.game_summary(id).await {
@@ -69,7 +71,9 @@ pub async fn sync_games(pool: &MySqlPool, espn: &Espn, log: impl Fn(&str)) -> Re
         added += 1;
         log(&format!(
             "Stored {} {} {} at {} {}",
-            game.starts_at.strftime("%Y-%m-%d"),
+            game.starts_at
+                .to_zoned(new_york.clone())
+                .strftime("%Y-%m-%d"),
             game.away.abbreviation,
             game.away_score,
             game.home.abbreviation,
