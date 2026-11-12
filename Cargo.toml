@@ -16,4 +16,4 @@ sqlx = { version = "=0.9.0", default-features = false, features = ["derive", "my
 tokio = { version = "=1.54.1", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
 tower-http = { version = "=0.7.1", features = ["fs", "set-header"] }
 ts-rs = "=12.0.1"
-webpki-root-certs = "=1.0.11"
+webpki-root-certs = "=1.0.12"
