@@ -5,4 +5,13 @@ export type PlayerRow = { id: number, name: string, last: string, position: stri
 /**
  * Net points per 48 with the player on and off the floor; null without a usable replay.
  */
-on48: number | null, off48: number | null, opp48: number | null, impact: Impact, };
+on48: number | null, off48: number | null, opp48: number | null, 
+/**
+ * `on48 - off48`.
+ */
+onOff: number | null, 
+/**
+ * The same player's `on_off` in the regular season before; set only in
+ * the current season.
+ */
+previousOnOff: number | null, impact: Impact, };

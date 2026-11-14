@@ -84,6 +84,37 @@ pub fn ratings(games: &[&Game]) -> Ratings {
     }
 }
 
+/// The margin chart's running averages, in games.
+const ROLLING_WINDOWS: [usize; 2] = [5, 10];
+/// The running average starts at this game of a season.
+const ROLLING_FIRST_GAME: usize = 3;
+
+#[derive(Serialize, TS)]
+#[ts(export)]
+pub struct Rolling {
+    pub window: i32,
+    /// One per game, oldest first: the average margin of the last `window`
+    /// games up to that one, fewer early in the season; null before the
+    /// average starts.
+    pub values: Vec<Option<f64>>,
+}
+
+pub fn rolling_margins(games: &[&Game]) -> Vec<Rolling> {
+    ROLLING_WINDOWS
+        .iter()
+        .map(|&window| Rolling {
+            window: window as i32,
+            values: (1..=games.len())
+                .map(|played| {
+                    let last = &games[played.saturating_sub(window)..played];
+                    (played >= ROLLING_FIRST_GAME)
+                        .then(|| sum(last, |g| f64::from(margin(g))) / last.len() as f64)
+                })
+                .collect(),
+        })
+        .collect()
+}
+
 // ---------------------------------------------------------------- seasons
 
 pub struct Season<'a> {
@@ -454,6 +485,11 @@ pub struct PlayerRow {
     pub on48: Option<f64>,
     pub off48: Option<f64>,
     pub opp48: Option<f64>,
+    /// `on48 - off48`.
+    pub on_off: Option<f64>,
+    /// The same player's `on_off` in the regular season before; set only in
+    /// the current season.
+    pub previous_on_off: Option<f64>,
     pub impact: Impact,
 }
 
@@ -646,13 +682,15 @@ pub fn player_report(games: &[&Game], replays: &HashMap<&str, Replay>) -> Player
                     )
                 }),
                 opp48: split.map(|f| per48(f64::from(f.pts_against), f.seconds)),
+                on_off: None,
+                previous_on_off: None,
                 impact: Impact {
                     kind: ImpactKind::Mixed,
                     tone: ImpactTone::Muted,
                 },
             };
-            let on_off = row.on48.zip(row.off48).map(|(a, b)| a - b);
-            row.impact = impact_of(&row, on_off);
+            row.on_off = row.on48.zip(row.off48).map(|(a, b)| a - b);
+            row.impact = impact_of(&row, row.on_off);
             row
         })
         .collect();
@@ -839,7 +877,7 @@ pub fn build_report(data: &Dataset) -> Report<'_> {
         .iter()
         .map(|g| (g.id.as_str(), replay_game(g)))
         .collect();
-    let seasons: Vec<SeasonReport> = group_seasons(&data.games)
+    let mut seasons: Vec<SeasonReport> = group_seasons(&data.games)
         .into_iter()
         .map(|season| SeasonReport {
             player_report: player_report(&season.games, &replays),
@@ -860,6 +898,18 @@ pub fn build_report(data: &Dataset) -> Report<'_> {
             .copied()
             .find(|&i| seasons[i].season.year == year - 1)
     });
+
+    if let (Some(current), Some(last)) = (current, last_regular) {
+        let before: HashMap<u32, Option<f64>> = seasons[last]
+            .player_report
+            .players
+            .iter()
+            .map(|p| (p.id, p.on_off))
+            .collect();
+        for p in &mut seasons[current].player_report.players {
+            p.previous_on_off = before.get(&p.id).copied().flatten();
+        }
+    }
 
     let last_series = seasons
         .iter()

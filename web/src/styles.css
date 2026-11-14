@@ -40,7 +40,9 @@ td:first-child, th:first-child { text-align: left; }
 .pairs th.up { height: 92px; vertical-align: bottom; }
 .pairs th.up span { writing-mode: vertical-rl; transform: rotate(180deg); display: inline-block; }
 .switch { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 12px 0; }
-button.on, .switch button { background: none; border: 0; color: #a39e94; font: inherit; cursor: pointer; padding: 0; }
+button.on, .switch button, th button { background: none; border: 0; color: #a39e94; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; padding: 0; }
+svg [hidden] { display: none; }
+.swing { display: inline-block; width: 56px; margin-left: 8px; vertical-align: middle; }
 button.on { color: #f4f1ea; text-decoration: underline; text-underline-offset: 4px; }
 .factor { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(120px, 1fr) 3.5rem; gap: 12px; align-items: center; margin: 10px 0; }
 .track { position: relative; height: 8px; background: #1a1a1a; }

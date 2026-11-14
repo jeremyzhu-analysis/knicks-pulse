@@ -18,4 +18,8 @@ home: boolean, neutral: boolean, opponent: Opponent, venue: string | null, atten
 /**
  * Points by period, index 0 is Q1.
  */
-usByPeriod: Array<number>, themByPeriod: Array<number>, };
+usByPeriod: Array<number>, themByPeriod: Array<number>, 
+/**
+ * Points per 100 possessions in this game.
+ */
+offense: number, defense: number, };

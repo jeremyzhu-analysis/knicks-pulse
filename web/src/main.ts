@@ -6,19 +6,57 @@ import { renderBody } from "./render/page.ts";
 import { parseHash, type View } from "./route.ts";
 import { startSync } from "./sync.ts";
 
-/** Season switch and the pairing readout. */
+/**
+ * Switches, readouts and sortable columns of the page on screen.
+ *
+ * A data-pick button shows the data-panel elements with its value and hides
+ * the others, within its data-group; the season switch has no group.
+ * A data-tip element writes its tip into the readout of the panel around it.
+ * A data-sort button in a column heading orders the table's rows by the
+ * data-v of that column's cells, largest first; cells without a value stay
+ * last.
+ */
 function wire(): void {
+  const group = (element: Element) => element.getAttribute("data-group") ?? "";
   document.querySelectorAll("[data-pick]").forEach((button) => {
     button.addEventListener("click", () => {
       const id = button.getAttribute("data-pick");
-      document.querySelectorAll("[data-pick]").forEach((item) => item.classList.toggle("on", item.getAttribute("data-pick") === id));
-      document.querySelectorAll<HTMLElement>("[data-panel]").forEach((panel) => { panel.hidden = panel.getAttribute("data-panel") !== id; });
+      const same = (element: Element) => group(element) === group(button);
+      document.querySelectorAll("[data-pick]").forEach((item) => {
+        if (same(item)) item.classList.toggle("on", item.getAttribute("data-pick") === id);
+      });
+      document.querySelectorAll("[data-panel]").forEach((panel) => {
+        if (same(panel)) panel.toggleAttribute("hidden", panel.getAttribute("data-panel") !== id);
+      });
     });
   });
-  document.querySelectorAll("[data-tip]").forEach((button) => {
+  document.querySelectorAll("[data-tip]").forEach((source) => {
+    const tell = () => {
+      const readout = source.closest("[data-panel]:not([data-group])")?.querySelector(".readout");
+      if (readout) readout.textContent = source.getAttribute("data-tip") || "";
+    };
+    for (const event of ["click", "mouseenter", "focus"]) source.addEventListener(event, tell);
+  });
+  document.querySelectorAll("[data-sort]").forEach((button) => {
     button.addEventListener("click", () => {
-      const readout = button.closest("[data-panel]")?.querySelector(".readout");
-      if (readout) readout.textContent = button.getAttribute("data-tip") || "";
+      const heading = button.closest("th");
+      const body = button.closest("table")?.querySelector("tbody");
+      if (!heading || !body) return;
+      const column = [...heading.parentElement!.children].indexOf(heading);
+      const descending = !(button.classList.contains("on") && button.getAttribute("data-order") === "desc");
+      heading.parentElement!.querySelectorAll("[data-sort]").forEach((other) => other.classList.remove("on"));
+      button.classList.add("on");
+      button.setAttribute("data-order", descending ? "desc" : "asc");
+      const value = (row: Element) => {
+        const v = row.children[column]?.getAttribute("data-v");
+        return v ? Number(v) : null;
+      };
+      const rows = [...body.children].sort((a, b) => {
+        const [x, y] = [value(a), value(b)];
+        if (x === null || y === null) return x === null ? (y === null ? 0 : 1) : -1;
+        return descending ? y - x : x - y;
+      });
+      body.append(...rows);
     });
   });
 }

@@ -1,7 +1,7 @@
-import type { Game } from "../api/Game.ts";
+import type { Season } from "../api/Season.ts";
 import type { QuarterRow } from "../api/QuarterRow.ts";
-import { escapeHtml, longDate, signed } from "../format.ts";
-import { margin, won } from "./game.ts";
+import { escapeHtml, fixed, longDate, signed } from "../format.ts";
+import { hosted, margin, won } from "./game.ts";
 
 const ORANGE = "#e07a3d";
 const BLUE = "#7eadd4";
@@ -18,11 +18,16 @@ export function heat(value: number, scale: number): { bg: string; fg: string } {
   return { bg, fg: t > 0.5 ? "#140e0a" : "#f4f1ea" };
 }
 
-const ROLLING = 5;
-const ROLLING_MIN = 3;
+/** The running average shown until the reader picks another. */
+export const ROLLING_DEFAULT = 5;
 
-/** Dot per game for the final margin, line for the rolling average. */
-export function marginChart(games: Game[]): string {
+/**
+ * Dot per game for the final margin, line for the running average: one line
+ * per window length, switched by the "window" group. A dot's data-tip is its
+ * readout.
+ */
+export function marginChart(season: Season): string {
+  const games = season.games;
   if (games.length === 0) return `<p class="note">No games yet.</p>`;
   const margins = games.map(margin);
   const top = Math.max(5, ...margins.map(Math.abs));
@@ -30,26 +35,32 @@ export function marginChart(games: Game[]): string {
   const x = (i: number) => (games.length === 1 ? left : left + ((right - left) * i) / (games.length - 1));
   const y = (v: number) => mid - (v / top) * half;
 
-  const points: string[] = [];
-  margins.forEach((_, i) => {
-    if (i + 1 < ROLLING_MIN) return;
-    const window = margins.slice(Math.max(0, i + 1 - ROLLING), i + 1);
-    const avg = window.reduce((a, b) => a + b, 0) / window.length;
-    points.push(`${points.length ? "L" : "M"}${x(i).toFixed(1)},${y(avg).toFixed(1)}`);
-  });
+  const lines = season.rolling
+    .map((rolling) => {
+      const points: string[] = [];
+      rolling.values.forEach((avg, i) => {
+        if (avg !== null) points.push(`${points.length ? "L" : "M"}${x(i).toFixed(1)},${y(avg).toFixed(1)}`);
+      });
+      if (points.length < 2) return "";
+      const hidden = rolling.window === ROLLING_DEFAULT ? "" : " hidden";
+      return `<path data-group="window" data-panel="${rolling.window}"${hidden} d="${points.join(" ")}" fill="none" stroke="#f4f1ea" stroke-width="2.2"/>`;
+    })
+    .join("");
   const label = (text: string, ty: number) =>
     `<text x="0" y="${ty.toFixed(1)}" fill="#a39e94" font-size="11" font-family="Arial">${text}</text>`;
   const dots = games
     .map((g, i) => {
-      const title = `${longDate(g.startsAt)} ${g.opponent.abbreviation} ${signed(margins[i]!, 0)}`;
-      return `<a href="#game/${escapeHtml(g.id)}"><circle cx="${x(i).toFixed(1)}" cy="${y(margins[i]!).toFixed(1)}" r="4.5" fill="${won(g) ? ORANGE : BLUE}"><title>${escapeHtml(title)}</title></circle></a>`;
+      const tip =
+        `${longDate(g.startsAt)} ${hosted(g) ? "vs" : "at"} ${g.opponent.abbreviation} · ${signed(margins[i]!, 0)} · ` +
+        `${g.pts}–${g.oppPts} · Offense ${fixed(g.offense)}, defense ${fixed(g.defense)}`;
+      return `<a href="#game/${escapeHtml(g.id)}" data-tip="${escapeHtml(tip)}"><circle cx="${x(i).toFixed(1)}" cy="${y(margins[i]!).toFixed(1)}" r="4.5" fill="${won(g) ? ORANGE : BLUE}"/></a>`;
     })
     .join("");
   return (
     `<svg viewBox="0 0 860 260" role="img" aria-label="Game margin">` +
     `<line x1="${left}" x2="${right}" y1="${mid}" y2="${mid}" stroke="#2a2a2a"/>` +
     label(`+${top}`, mid - half + 4) + label("0", mid + 4) + label(`-${top}`, mid + half + 4) +
-    (points.length > 1 ? `<path d="${points.join(" ")}" fill="none" stroke="#f4f1ea" stroke-width="2.2"/>` : "") +
+    lines +
     dots +
     `</svg>`
   );

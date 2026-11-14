@@ -110,6 +110,8 @@ Other free sources checked:
 - Four factors: eFG% `(FGM + 0.5·3PM) / FGA`, turnover rate
   `TOV / (FGA + 0.44·FTA + TOV)`, offensive rebound rate
   `OREB / (OREB + opponent DREB)`, free-throw rate `FTA / FGA`.
+- The margin chart's running average covers the last 5 or 10 games of the
+  season (fewer early on) and starts at the third game.
 - Rest days count calendar days in New York between games.
 - Home and Road leave out games at a neutral site.
 - On/off and pairings replay the play-by-play to know who was on the floor.

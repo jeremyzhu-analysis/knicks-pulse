@@ -5,7 +5,7 @@ import type { PlayerRow } from "../api/PlayerRow.ts";
 import type { Report } from "../api/Report.ts";
 import type { Season } from "../api/Season.ts";
 import { dateTime, escapeHtml as e, fixed, lastName, longDate, percent, record, shortDate, signed } from "../format.ts";
-import { heat, marginChart, quarterChart } from "./charts.ts";
+import { heat, marginChart, quarterChart, ROLLING_DEFAULT } from "./charts.ts";
 import { knicksMark, liberty } from "./brand.ts";
 import { hosted, margin, site, won } from "./game.ts";
 import { impactLabel, impactTitle } from "./impact.ts";
@@ -162,11 +162,20 @@ function gameLinks(games: Game[]): string {
 }
 
 function gamesSection(report: PageData): string {
+  const windows = report.current?.rolling.map((r) => r.window) ?? [];
+  const windowSwitch = windows
+    .map((w) => `<button type="button" data-group="window" data-pick="${w}" class="${w === ROLLING_DEFAULT ? "on" : ""}">${w}-game average</button>`)
+    .join("");
+  const latest = (s: Season) => {
+    const g = s.games.at(-1);
+    return g ? `Latest: ${shortDate(g.startsAt)} ${e(g.opponent.abbreviation)} ${signed(margin(g), 0)}.` : "";
+  };
   return `${latestGame(report.latestGame)}<section>
   <p class="kicker">Team / Games</p>
   <h2>The margin, one night at a time</h2>
   <p>Dot is the final margin. Line is the running average.</p>
-  ${seasonPanels(report, (s) => `${marginChart(s.games)}<p class="note">Orange win. Blue loss. White line, 5-game average. Pick a game to see it player by player.</p>${gameLinks(s.games)}`)}
+  <div class="switch">${windowSwitch}</div>
+  ${seasonPanels(report, (s) => `${marginChart(s)}<p class="readout">${latest(s)}</p><p class="note">Orange win. Blue loss. White line, running average. Point at a game for its numbers; pick it to see it player by player.</p>${gameLinks(s.games)}`)}
 </section>`;
 }
 
@@ -292,30 +301,49 @@ function pairsSection(report: PageData): string {
 </section>`;
 }
 
+/** A header cell that sorts its table by this column, and a body cell carrying the value it sorts by. */
+const sortHead = (label: string) => `<button type="button" data-sort>${label}</button>`;
+const sortCell = (value: number | null, text: string) => `<td data-v="${value ?? ""}">${text}</td>`;
+
+/** On−off as a number with a bar from the middle, full at this many points. */
+const SWING_FULL = 20;
+function swing(diff: number | null): string {
+  if (diff === null) return sortCell(null, "—");
+  const width = (Math.min(SWING_FULL, Math.abs(diff)) / SWING_FULL) * 50;
+  const bar = `<span class="track swing"><i style="left:${diff < 0 ? 50 - width : 50}%;width:${width}%;background:${diff < 0 ? "#7eadd4" : "#e07a3d"}"></i></span>`;
+  return sortCell(diff, `${signed(diff)}${bar}`);
+}
+
 function playersSection(report: PageData): string {
-  const onOff = (p: PlayerRow) => (p.on48 === null || p.off48 === null ? null : p.on48 - p.off48);
   const leader = report.current?.playerReport.players
-    .filter((p) => p.impact.kind !== "lowMinutes" && onOff(p) !== null)
-    .sort((a, b) => onOff(b)! - onOff(a)!)[0];
-  const rows = (s: Season) =>
-    table(
-      ["Player", "GP", "Min", "Pts", "Reb", "Ast", "TS%", "+/−", "On−off", "Opp/48", "Impact"],
-      s.playerReport.players.map((p) => {
-        const diff = onOff(p);
-        return [
-          `${e(p.name)}${p.position ? ` <span class="pos">${e(p.position)}</span>` : ""}`,
-          String(p.gp), fixed(p.mpg), fixed(p.ppg), fixed(p.rpg), fixed(p.apg), percent(p.ts), signed(p.plusMinus),
-          diff === null ? "—" : signed(diff),
-          p.opp48 === null ? "—" : fixed(p.opp48),
-          `<span class="chip ${p.impact.tone}" title="${e(impactTitle(p))}">${impactLabel(p)}</span>`,
-        ];
-      }),
+    .filter((p) => p.impact.kind !== "lowMinutes" && p.onOff !== null)
+    .sort((a, b) => b.onOff! - a.onOff!)[0];
+  const rows = (s: Season) => {
+    // Only the current season is compared with the one before.
+    const compared = s.key === report.currentKey && report.lastRegular !== null;
+    const head = ["Player", "GP", ...["Min", "Pts", "Reb", "Ast", "TS%", "+/−", "On−off"].map(sortHead)];
+    if (compared) head.push("Last year");
+    head.push(sortHead("Opp/48"), "Impact");
+    return table(
+      head,
+      s.playerReport.players.map((p: PlayerRow) => [
+        `${e(p.name)}${p.position ? ` <span class="pos">${e(p.position)}</span>` : ""}`,
+        String(p.gp),
+        sortCell(p.mpg, fixed(p.mpg)), sortCell(p.ppg, fixed(p.ppg)), sortCell(p.rpg, fixed(p.rpg)), sortCell(p.apg, fixed(p.apg)),
+        sortCell(p.ts, percent(p.ts)), sortCell(p.plusMinus, signed(p.plusMinus)),
+        swing(p.onOff),
+        ...(compared ? [p.previousOnOff === null ? "—" : signed(p.previousOnOff)] : []),
+        sortCell(p.opp48, p.opp48 === null ? "—" : fixed(p.opp48)),
+        `<span class="chip ${p.impact.tone}" title="${e(impactTitle(p))}">${impactLabel(p)}</span>`,
+      ]),
     );
+  };
   return `<section>
   <p class="kicker">Players / Impact</p>
   <h2>What kind of impact</h2>
-  <p>${leader ? `${e(leader.last)} ${signed(onOff(leader)!)} on/off.` : ""}</p>
+  <p>${leader ? `${e(leader.last)} ${signed(leader.onOff!)} on/off.` : ""}</p>
   ${seasonPanels(report, rows)}
+  <p class="note">Most minutes first. Pick a column heading to sort by it; pick it again to turn the order around.</p>
 </section>`;
 }
 

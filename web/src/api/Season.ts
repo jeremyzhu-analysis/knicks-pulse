@@ -2,6 +2,7 @@
 import type { Game } from "./Game";
 import type { PlayerReport } from "./PlayerReport";
 import type { Ratings } from "./Ratings";
+import type { Rolling } from "./Rolling";
 
 export type Season = { 
 /**
@@ -15,4 +16,8 @@ type: number, label: string, ratings: Ratings,
 /**
  * Oldest first.
  */
-games: Array<Game>, playerReport: PlayerReport, };
+games: Array<Game>, 
+/**
+ * The margin's running average over `games`, one entry per window length.
+ */
+rolling: Array<Rolling>, playerReport: PlayerReport, };

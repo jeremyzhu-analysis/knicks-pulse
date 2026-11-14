@@ -8,7 +8,8 @@ use ts_rs::TS;
 use crate::report::compute::PAIR_MIN_SECONDS;
 use crate::report::compute::{
     Factors, GamePlayer, LastSeries, PlayerReport, QuarterRow, Ratings, Report as Computed,
-    SeasonReport, Situation, build_report, factors, game_players, quarters, situations,
+    Rolling, SeasonReport, Situation, build_report, factors, game_players, quarters, ratings,
+    rolling_margins, situations,
 };
 use crate::report::dates::new_york;
 use crate::report::lineups::{REPLAY_TOLERANCE, replay_game};
@@ -76,6 +77,8 @@ pub struct Season {
     pub ratings: Ratings,
     /// Oldest first.
     pub games: Vec<Game>,
+    /// The margin's running average over `games`, one entry per window length.
+    pub rolling: Vec<Rolling>,
     pub player_report: PlayerReport,
 }
 
@@ -109,6 +112,9 @@ pub struct Game {
     /// Points by period, index 0 is Q1.
     pub us_by_period: Vec<i32>,
     pub them_by_period: Vec<i32>,
+    /// Points per 100 possessions in this game.
+    pub offense: f64,
+    pub defense: f64,
 }
 
 #[derive(Serialize, TS)]
@@ -152,6 +158,7 @@ pub fn game_detail(g: &load::Game) -> GameDetail {
 }
 
 fn game(g: &load::Game) -> Game {
+    let rated = ratings(&[g]);
     Game {
         id: g.id.clone(),
         starts_at: g.starts_at.to_string(),
@@ -170,6 +177,8 @@ fn game(g: &load::Game) -> Game {
         opp_pts: g.opp_pts,
         us_by_period: g.us_by_period.clone(),
         them_by_period: g.them_by_period.clone(),
+        offense: rated.offense,
+        defense: rated.defense,
     }
 }
 
@@ -181,6 +190,7 @@ fn season(s: SeasonReport) -> Season {
         label: s.season.label,
         ratings: s.season.ratings,
         games: s.season.games.iter().map(|g| game(g)).collect(),
+        rolling: rolling_margins(&s.season.games),
         player_report: s.player_report,
     }
 }
