@@ -104,6 +104,7 @@ Other free sources checked:
   `TOV / (FGA + 0.44·FTA + TOV)`, offensive rebound rate
   `OREB / (OREB + opponent DREB)`, free-throw rate `FTA / FGA`.
 - Rest days count calendar days in New York between games.
+- Home and Road leave out games at a neutral site.
 - On/off and pairings replay the play-by-play to know who was on the floor.
   ESPN doesn't list who starts the 2nd quarter onward, so the replay infers it
   (`src/report/lineups.rs`). A game is used for on-court numbers only when

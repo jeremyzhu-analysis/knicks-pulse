@@ -7,7 +7,7 @@ import type { Season } from "../api/Season.ts";
 import { dateTime, escapeHtml as e, fixed, lastName, longDate, percent, record, shortDate, signed } from "../format.ts";
 import { heat, marginChart, quarterChart } from "./charts.ts";
 import { knicksMark, liberty } from "./brand.ts";
-import { margin, won } from "./game.ts";
+import { hosted, margin, site, won } from "./game.ts";
 import { impactLabel, impactTitle } from "./impact.ts";
 
 const TEAM = "Knicks";
@@ -95,7 +95,7 @@ export function scoreTable(game: Game): string {
 
 /** Date, opponent and venue. */
 export function gameWhere(game: Game): string {
-  return [longDate(game.startsAt), `${game.home ? "vs" : "at"} ${game.opponent.abbreviation}`, game.venue]
+  return [longDate(game.startsAt), `${hosted(game) ? "vs" : "at"} ${game.opponent.abbreviation}`, game.venue]
     .filter(Boolean)
     .map((w) => e(w!))
     .join(" · ");
@@ -114,7 +114,7 @@ function latestGame(game: LatestGame | null): string {
   const swing = quartersPlayed.reduce((best, d, i) => (Math.abs(d) > Math.abs(quartersPlayed[best]!) ? i : best), 0);
   const top = game.topScorer;
   const summary = [
-    `${game.home ? "Home" : "Road"} ${won(game) ? "win" : "loss"}.`,
+    `${site(game)} ${won(game) ? "win" : "loss"}.`,
     `${periodName(swing)} ${signed(quartersPlayed[swing] ?? 0, 0)}.`,
     top ? `${e(lastName(top.fullName))} ${top.pts} pts.` : "",
   ].join(" ");
@@ -179,7 +179,7 @@ function quartersSection(report: PageData): string {
         const q = (i: number) => (g.usByPeriod[i] ?? 0) - (g.themByPeriod[i] ?? 0);
         const ot = g.usByPeriod.slice(4).reduce((a, p, i) => a + p - (g.themByPeriod[i + 4] ?? 0), 0);
         return [
-          `<td class="name">${shortDate(g.startsAt)} ${g.home ? "vs" : "@"} ${e(g.opponent.abbreviation)}</td>`,
+          `<td class="name">${shortDate(g.startsAt)} ${hosted(g) ? "vs" : "@"} ${e(g.opponent.abbreviation)}</td>`,
           `<td class="${won(g) ? "" : "loss"}">${g.pts}–${g.oppPts}</td>`,
           ...[0, 1, 2, 3].map((i) => cell(q(i), 15, signed(q(i), 0))),
           g.periods > 4 ? cell(ot, 15, signed(ot, 0)) : `<td class="empty">—</td>`,

@@ -73,9 +73,12 @@ pub struct Game {
     pub id: String,
     /// ISO 8601 in UTC.
     pub starts_at: String,
+    /// True for the designated home team, also at a neutral site.
     pub home: bool,
+    pub neutral: bool,
     pub opponent: Opponent,
     pub venue: Option<String>,
+    pub attendance: Option<u32>,
     pub note: Option<String>,
     pub periods: i32,
     pub pts: i32,
@@ -130,12 +133,14 @@ fn game(g: &load::Game) -> Game {
         id: g.id.clone(),
         starts_at: g.starts_at.to_string(),
         home: g.home,
+        neutral: g.neutral,
         opponent: Opponent {
             id: g.opponent.id,
             abbreviation: g.opponent.abbreviation.clone(),
             name: g.opponent.name.clone(),
         },
         venue: g.venue.clone(),
+        attendance: g.attendance,
         note: g.note.clone(),
         periods: g.periods,
         pts: g.pts,

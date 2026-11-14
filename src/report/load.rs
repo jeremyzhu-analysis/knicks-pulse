@@ -57,9 +57,12 @@ pub struct Game {
     pub season_year: i32,
     pub season_type: i32,
     pub starts_at: Timestamp,
+    /// True for the designated home team, also at a neutral site.
     pub home: bool,
+    pub neutral: bool,
     pub opponent: Opponent,
     pub venue: Option<String>,
+    pub attendance: Option<u32>,
     pub note: Option<String>,
     pub periods: i32,
     pub pts: i32,
@@ -95,6 +98,8 @@ struct GameDb {
     venue: Option<String>,
     note: Option<String>,
     synced_at: String,
+    neutral: bool,
+    attendance: Option<u32>,
 }
 
 #[derive(FromRow)]
@@ -195,7 +200,8 @@ fn parse_utc(value: &str) -> Result<Timestamp> {
 pub async fn load_dataset(pool: &MySqlPool, team_id: u32) -> Result<Dataset> {
     let game_rows: Vec<GameDb> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT id, season_year, season_type, DATE_FORMAT(starts_at, {UTC_ISO}) starts_at, home_team_id, away_team_id,
-                home_score, away_score, periods, venue, note, DATE_FORMAT(synced_at, {UTC_ISO}) synced_at
+                home_score, away_score, periods, venue, note, DATE_FORMAT(synced_at, {UTC_ISO}) synced_at,
+                neutral, attendance
            FROM games WHERE home_team_id = ? OR away_team_id = ? ORDER BY games.starts_at"
     )))
     .bind(team_id)
@@ -339,12 +345,14 @@ pub async fn load_dataset(pool: &MySqlPool, team_id: u32) -> Result<Dataset> {
             season_type: g.season_type.into(),
             starts_at: parse_utc(&g.starts_at)?,
             home,
+            neutral: g.neutral,
             opponent: Opponent {
                 id: opp_id,
                 abbreviation: opp.map_or_else(|| "?".into(), |t| t.abbreviation.clone()),
                 name: opp.map_or_else(|| "Opponent".into(), |t| t.display_name.clone()),
             },
             venue: g.venue,
+            attendance: g.attendance,
             note: g.note,
             periods: g.periods.into(),
             pts: if home { g.home_score } else { g.away_score }.into(),

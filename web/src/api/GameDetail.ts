@@ -10,7 +10,11 @@ replayed: boolean, replayTolerance: number, players: Array<GamePlayer>, id: stri
 /**
  * ISO 8601 in UTC.
  */
-startsAt: string, home: boolean, opponent: Opponent, venue: string | null, note: string | null, periods: number, pts: number, oppPts: number, 
+startsAt: string, 
+/**
+ * True for the designated home team, also at a neutral site.
+ */
+home: boolean, neutral: boolean, opponent: Opponent, venue: string | null, attendance: number | null, note: string | null, periods: number, pts: number, oppPts: number, 
 /**
  * Points by period, index 0 is Q1.
  */

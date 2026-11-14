@@ -352,8 +352,8 @@ fn situation_games<'a>(
     };
     let rest = |test: fn(i64) -> bool| pick(&|i| rest_of[i].is_some_and(test));
     Ok(vec![
-        ("Home", pick(&|i| games[i].home)),
-        ("Road", pick(&|i| !games[i].home)),
+        ("Home", pick(&|i| games[i].home && !games[i].neutral)),
+        ("Road", pick(&|i| !games[i].home && !games[i].neutral)),
         ("Back-to-back", rest(|d| d == 0)),
         ("One day off", rest(|d| d == 1)),
         ("Two or more days off", rest(|d| d >= 2)),
