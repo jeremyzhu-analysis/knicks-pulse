@@ -5,8 +5,13 @@ export type GamePlayer = { id: number, name: string, position: string | null, st
 /**
  * Null without a shot or free throw.
  */
-ts: number | null, plusMinus: number, 
+ts: number | null, plusMinus: number, gameScore: number, 
 /**
- * Empty when the game's replay didn't hold up.
+ * Points by period, index 0 is Q1; null when the play-by-play doesn't
+ * add up to the player's points.
+ */
+pointsByPeriod: Array<number> | null, 
+/**
+ * Empty for an opponent, and when the game's replay didn't hold up.
  */
 stints: Array<Stint>, };

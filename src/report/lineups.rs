@@ -319,13 +319,18 @@ mod tests {
             starter: id <= 5,
             minutes: 0,
             pts: 0,
+            fgm: 0,
             fga: 0,
+            ftm: 0,
             fta: 0,
+            oreb: 0,
+            dreb: 0,
             reb: 0,
             ast: 0,
             stl: 0,
             blk: 0,
             tov: 0,
+            pf: 0,
             plus_minus,
         }
     }
@@ -338,6 +343,7 @@ mod tests {
             home_score: home,
             away_score: away,
             players: [Some(a), Some(b), None],
+            score_value: 0,
         }
     }
 
@@ -382,6 +388,7 @@ mod tests {
                 .zip(plus_minus)
                 .map(|(&id, pm)| player_line(id, pm))
                 .collect(),
+            opponent_players: vec![],
             plays,
         }
     }

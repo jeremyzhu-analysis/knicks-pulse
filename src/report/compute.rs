@@ -10,7 +10,7 @@ use serde::Serialize;
 use ts_rs::TS;
 
 use crate::report::dates::{day_number, last_name, season_label};
-use crate::report::lineups::{Replay, Stint, replay_game};
+use crate::report::lineups::{GameMoment, Replay, Stint, replay_game};
 use crate::report::load::{BoxScore, Dataset, Game, PlayerGame};
 
 // ---------------------------------------------------------------- basics
@@ -759,6 +759,116 @@ pub fn player_report(games: &[&Game], replays: &HashMap<&str, Replay>) -> Player
 
 // ---------------------------------------------------------------- one game
 
+/// The score after every play that changed it, from the opening tip at 0-0.
+pub fn flow(game: &Game) -> Vec<GameMoment> {
+    let mut moments = vec![GameMoment {
+        period: 1,
+        clock_seconds: 720.0,
+        us: 0,
+        them: 0,
+    }];
+    let (mut us, mut them) = (0, 0);
+    for play in &game.plays {
+        let (now_us, now_them) = if game.home {
+            (play.home_score, play.away_score)
+        } else {
+            (play.away_score, play.home_score)
+        };
+        if (now_us, now_them) != (us, them) {
+            (us, them) = (now_us, now_them);
+            moments.push(GameMoment {
+                period: play.period,
+                clock_seconds: play.clock_seconds,
+                us,
+                them,
+            });
+        }
+    }
+    moments
+}
+
+/// One team's game: the four factors and where its points came from.
+#[derive(Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct GameSide {
+    pub efg: f64,
+    pub tov: f64,
+    pub orb: f64,
+    pub ftr: f64,
+    pub paint: i32,
+    pub fast_break: i32,
+    pub off_tov: i32,
+    /// From the play-by-play; 0 for a team that never led.
+    pub largest_lead: i32,
+}
+
+/// (the report team, its opponent)
+pub fn game_sides(game: &Game, flow: &[GameMoment]) -> (GameSide, GameSide) {
+    let build = |side: Side, own: &BoxScore, lead: fn(&GameMoment) -> i32| {
+        let rates = factor_rows(&[game], side);
+        GameSide {
+            efg: rates.efg,
+            tov: rates.tov,
+            orb: rates.orb,
+            ftr: rates.ftr,
+            paint: own.paint_pts,
+            fast_break: own.fast_break_pts,
+            off_tov: own.pts_off_tov,
+            largest_lead: flow.iter().map(lead).max().unwrap_or(0).max(0),
+        }
+    };
+    (
+        build(Side::Us, &game.us, |m| m.us - m.them),
+        build(Side::Them, &game.them, |m| m.them - m.us),
+    )
+}
+
+/// John Hollinger's game score: a box-score line as one number, on the scale
+/// of points.
+pub fn game_score(p: &PlayerGame) -> f64 {
+    f64::from(p.pts) + 0.4 * f64::from(p.fgm)
+        - 0.7 * f64::from(p.fga)
+        - 0.4 * f64::from(p.fta - p.ftm)
+        + 0.7 * f64::from(p.oreb)
+        + 0.3 * f64::from(p.dreb)
+        + f64::from(p.stl)
+        + 0.7 * f64::from(p.ast)
+        + 0.7 * f64::from(p.blk)
+        - 0.4 * f64::from(p.pf)
+        - f64::from(p.tov)
+}
+
+/// Each player's points by period (index 0 is Q1), from the play-by-play.
+/// A player is left out when their plays don't add up to their box-score
+/// points, so a wrong split is never shown.
+pub fn points_by_period(game: &Game) -> HashMap<u32, Vec<i32>> {
+    let periods = game.periods.max(0) as usize;
+    let mut by_player: HashMap<u32, Vec<i32>> = HashMap::new();
+    for play in &game.plays {
+        let Some(scorer) = play.players[0].filter(|_| play.score_value > 0) else {
+            continue;
+        };
+        let Some(slot) = (play.period as usize)
+            .checked_sub(1)
+            .filter(|&i| i < periods)
+        else {
+            continue;
+        };
+        by_player.entry(scorer).or_insert_with(|| vec![0; periods])[slot] += play.score_value;
+    }
+    let mut checked = HashMap::new();
+    for p in game.players.iter().chain(&game.opponent_players) {
+        let points = by_player
+            .remove(&p.player_id)
+            .unwrap_or_else(|| vec![0; periods]);
+        if points.iter().sum::<i32>() == p.pts {
+            checked.insert(p.player_id, points);
+        }
+    }
+    checked
+}
+
 #[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -777,14 +887,22 @@ pub struct GamePlayer {
     /// Null without a shot or free throw.
     pub ts: Option<f64>,
     pub plus_minus: i32,
-    /// Empty when the game's replay didn't hold up.
+    pub game_score: f64,
+    /// Points by period, index 0 is Q1; null when the play-by-play doesn't
+    /// add up to the player's points.
+    pub points_by_period: Option<Vec<i32>>,
+    /// Empty for an opponent, and when the game's replay didn't hold up.
     pub stints: Vec<Stint>,
 }
 
-/// Starters first, then by minutes.
-pub fn game_players(game: &Game, replay: &Replay) -> Vec<GamePlayer> {
-    let mut players: Vec<GamePlayer> = game
-        .players
+/// Starters first, then by minutes. `replay` is the report team's; pass None
+/// for the opponent's players.
+pub fn game_players(
+    players: &[PlayerGame],
+    points_by_period: &HashMap<u32, Vec<i32>>,
+    replay: Option<&Replay>,
+) -> Vec<GamePlayer> {
+    let mut players: Vec<GamePlayer> = players
         .iter()
         .map(|p| {
             let shots = f64::from(p.fga) + 0.44 * f64::from(p.fta);
@@ -802,10 +920,11 @@ pub fn game_players(game: &Game, replay: &Replay) -> Vec<GamePlayer> {
                 tov: p.tov,
                 ts: (shots > 0.0).then(|| f64::from(p.pts) / (2.0 * shots)),
                 plus_minus: p.plus_minus,
+                game_score: game_score(p),
+                points_by_period: points_by_period.get(&p.player_id).cloned(),
                 stints: replay
-                    .stints
-                    .get(&p.player_id)
-                    .filter(|_| replay.ok)
+                    .filter(|replay| replay.ok)
+                    .and_then(|replay| replay.stints.get(&p.player_id))
                     .cloned()
                     .unwrap_or_default(),
             }

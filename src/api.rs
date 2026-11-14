@@ -7,12 +7,12 @@ use ts_rs::TS;
 
 use crate::report::compute::PAIR_MIN_SECONDS;
 use crate::report::compute::{
-    Factors, GamePlayer, LastSeries, PlayerReport, QuarterRow, Ratings, Report as Computed,
-    Rolling, SeasonReport, Situation, build_report, factors, game_players, quarters, ratings,
-    rolling_margins, situations,
+    Factors, GamePlayer, GameSide, LastSeries, PlayerReport, QuarterRow, Ratings,
+    Report as Computed, Rolling, SeasonReport, Situation, build_report, factors, flow,
+    game_players, game_sides, points_by_period, quarters, ratings, rolling_margins, situations,
 };
 use crate::report::dates::new_york;
-use crate::report::lineups::{REPLAY_TOLERANCE, replay_game};
+use crate::report::lineups::{GameMoment, REPLAY_TOLERANCE, replay_game};
 use crate::report::load::{self, Dataset};
 
 #[derive(Serialize, TS)]
@@ -144,16 +144,28 @@ pub struct GameDetail {
     /// False when the lineup replay is too far from the box score to show stints.
     pub replayed: bool,
     pub replay_tolerance: i32,
+    /// The score after every play that changed it, starting at 0-0.
+    pub flow: Vec<GameMoment>,
+    pub us: GameSide,
+    pub them: GameSide,
     pub players: Vec<GamePlayer>,
+    pub opponents: Vec<GamePlayer>,
 }
 
 pub fn game_detail(g: &load::Game) -> GameDetail {
     let replay = replay_game(g);
+    let flow = flow(g);
+    let (us, them) = game_sides(g, &flow);
+    let points = points_by_period(g);
     GameDetail {
         game: game(g),
         replayed: replay.ok,
         replay_tolerance: REPLAY_TOLERANCE,
-        players: game_players(g, &replay),
+        flow,
+        us,
+        them,
+        players: game_players(&g.players, &points, Some(&replay)),
+        opponents: game_players(&g.opponent_players, &points, None),
     }
 }
 

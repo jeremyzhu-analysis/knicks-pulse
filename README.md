@@ -121,6 +121,12 @@ Other free sources checked:
 - A game's stints come from the same replay, and are left out when that game
   fails the check above. Each one's net points can differ from the box score
   by up to that same 8.
+- On a game's page, each player's points by period add up the points of the
+  plays ESPN credits to them; a player whose plays don't add up to their
+  box-score points shows no split. Largest lead comes from the same
+  play-by-play.
+- Game score is `PTS + 0.4·FGM − 0.7·FGA − 0.4·(FTA − FTM) + 0.7·OREB +
+  0.3·DREB + STL + 0.7·AST + 0.7·BLK − 0.4·PF − TOV`.
 - The impact label's thresholds are in the `impact` module of
   `src/report/compute.rs`; the label text and tooltip are in
   `web/src/render/impact.ts`.

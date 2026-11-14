@@ -81,7 +81,7 @@ function hero(report: PageData): string {
 </section>`;
 }
 
-const periodName = (i: number) => (i < 4 ? `Q${i + 1}` : i === 4 ? "OT" : `OT${i - 3}`);
+export const periodName = (i: number) => (i < 4 ? `Q${i + 1}` : i === 4 ? "OT" : `OT${i - 3}`);
 
 /** Score by period for both teams, with the margin. */
 export function scoreTable(game: Game): string {
@@ -97,7 +97,8 @@ export function scoreTable(game: Game): string {
 
 /** Date, opponent and venue. */
 export function gameWhere(game: Game): string {
-  return [longDate(game.startsAt), `${hosted(game) ? "vs" : "at"} ${game.opponent.abbreviation}`, game.venue]
+  const attendance = game.attendance === null ? null : `Attendance ${game.attendance.toLocaleString("en-US")}`;
+  return [longDate(game.startsAt), `${hosted(game) ? "vs" : "at"} ${game.opponent.abbreviation}`, game.venue, attendance, game.note]
     .filter(Boolean)
     .map((w) => e(w!))
     .join(" · ");

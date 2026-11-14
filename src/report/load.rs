@@ -26,13 +26,18 @@ pub struct PlayerGame {
     pub starter: bool,
     pub minutes: i32,
     pub pts: i32,
+    pub fgm: i32,
     pub fga: i32,
+    pub ftm: i32,
     pub fta: i32,
+    pub oreb: i32,
+    pub dreb: i32,
     pub reb: i32,
     pub ast: i32,
     pub stl: i32,
     pub blk: i32,
     pub tov: i32,
+    pub pf: i32,
     pub plus_minus: i32,
 }
 
@@ -42,7 +47,10 @@ pub struct PlayRow {
     pub type_text: String,
     pub home_score: i32,
     pub away_score: i32,
+    /// The player the play is credited to comes first: the shooter of a shot.
     pub players: [Option<u32>; 3],
+    /// Points the play scored.
+    pub score_value: i32,
 }
 
 pub struct Opponent {
@@ -72,7 +80,9 @@ pub struct Game {
     /// Points by period, index 0 is Q1.
     pub us_by_period: Vec<i32>,
     pub them_by_period: Vec<i32>,
+    /// The report team's players.
     pub players: Vec<PlayerGame>,
+    pub opponent_players: Vec<PlayerGame>,
     pub plays: Vec<PlayRow>,
 }
 
@@ -137,12 +147,15 @@ struct PeriodDb {
 struct PlayerDb {
     game_id: u64,
     player_id: u32,
+    team_id: u32,
     full_name: String,
     position: Option<String>,
     starter: bool,
     minutes: u16,
     pts: u16,
+    fgm: u16,
     fga: u16,
+    ftm: u16,
     fta: u16,
     oreb: u16,
     dreb: u16,
@@ -150,6 +163,7 @@ struct PlayerDb {
     stl: u16,
     blk: u16,
     tov: u16,
+    pf: u16,
     plus_minus: i16,
 }
 
@@ -164,6 +178,7 @@ struct PlayDb {
     player1_id: Option<u32>,
     player2_id: Option<u32>,
     player3_id: Option<u32>,
+    score_value: u8,
 }
 
 impl From<&TeamStatsDb> for BoxScore {
@@ -235,13 +250,13 @@ pub async fn load_dataset(pool: &MySqlPool, team_id: u32) -> Result<Dataset> {
     // Player order decides ties later (sorting by minutes, the top scorer), so
     // the query fixes it instead of leaving it to the query plan.
     let players = sqlx::query_as::<_, PlayerDb>(sqlx::AssertSqlSafe(format!(
-        "SELECT gp.game_id, gp.player_id, p.full_name, p.position, gp.starter, gp.minutes,
-                gp.pts, gp.fga, gp.fta, gp.oreb, gp.dreb, gp.ast, gp.stl, gp.blk, gp.tov, gp.plus_minus
+        "SELECT gp.game_id, gp.player_id, gp.team_id, p.full_name, p.position, gp.starter, gp.minutes,
+                gp.pts, gp.fgm, gp.fga, gp.ftm, gp.fta, gp.oreb, gp.dreb, gp.ast, gp.stl, gp.blk,
+                gp.tov, gp.pf, gp.plus_minus
            FROM game_players gp JOIN players p ON p.id = gp.player_id
-          WHERE gp.team_id = ? AND gp.game_id IN {TEAM_GAMES}
+          WHERE gp.game_id IN {TEAM_GAMES}
           ORDER BY gp.game_id, gp.player_id"
     )))
-    .bind(team_id)
     .bind(team_id)
     .bind(team_id)
     .fetch_all(pool);
@@ -249,7 +264,7 @@ pub async fn load_dataset(pool: &MySqlPool, team_id: u32) -> Result<Dataset> {
     // double without a decimal crate.
     let plays = sqlx::query_as::<_, PlayDb>(sqlx::AssertSqlSafe(format!(
         "SELECT game_id, period, CAST(clock_s AS CHAR) clock_s, type_text, home_score, away_score,
-                player1_id, player2_id, player3_id
+                player1_id, player2_id, player3_id, score_value
            FROM plays WHERE game_id IN {TEAM_GAMES} ORDER BY game_id, ord"
     )))
     .bind(team_id)
@@ -300,27 +315,36 @@ pub async fn load_dataset(pool: &MySqlPool, team_id: u32) -> Result<Dataset> {
             }
             list
         };
-        let players = players_by_game
+        let (players, opponent_players) = players_by_game
             .remove(&g.id)
             .unwrap_or_default()
             .into_iter()
-            .map(|p| PlayerGame {
-                player_id: p.player_id,
-                full_name: p.full_name,
-                position: p.position,
-                starter: p.starter,
-                minutes: p.minutes.into(),
-                pts: p.pts.into(),
-                fga: p.fga.into(),
-                fta: p.fta.into(),
-                reb: i32::from(p.oreb) + i32::from(p.dreb),
-                ast: p.ast.into(),
-                stl: p.stl.into(),
-                blk: p.blk.into(),
-                tov: p.tov.into(),
-                plus_minus: p.plus_minus.into(),
-            })
-            .collect();
+            .partition::<Vec<_>, _>(|p| p.team_id == team_id);
+        let lines = |rows: Vec<PlayerDb>| -> Vec<PlayerGame> {
+            rows.into_iter()
+                .map(|p| PlayerGame {
+                    player_id: p.player_id,
+                    full_name: p.full_name,
+                    position: p.position,
+                    starter: p.starter,
+                    minutes: p.minutes.into(),
+                    pts: p.pts.into(),
+                    fgm: p.fgm.into(),
+                    fga: p.fga.into(),
+                    ftm: p.ftm.into(),
+                    fta: p.fta.into(),
+                    oreb: p.oreb.into(),
+                    dreb: p.dreb.into(),
+                    reb: i32::from(p.oreb) + i32::from(p.dreb),
+                    ast: p.ast.into(),
+                    stl: p.stl.into(),
+                    blk: p.blk.into(),
+                    tov: p.tov.into(),
+                    pf: p.pf.into(),
+                    plus_minus: p.plus_minus.into(),
+                })
+                .collect()
+        };
         let plays = plays_by_game
             .remove(&g.id)
             .unwrap_or_default()
@@ -336,6 +360,7 @@ pub async fn load_dataset(pool: &MySqlPool, team_id: u32) -> Result<Dataset> {
                     home_score: p.home_score.into(),
                     away_score: p.away_score.into(),
                     players: [p.player1_id, p.player2_id, p.player3_id],
+                    score_value: p.score_value.into(),
                 })
             })
             .collect::<Result<_>>()?;
@@ -361,7 +386,8 @@ pub async fn load_dataset(pool: &MySqlPool, team_id: u32) -> Result<Dataset> {
             them: box_for(opp_id)?,
             us_by_period: by_period(team_id),
             them_by_period: by_period(opp_id),
-            players,
+            players: lines(players),
+            opponent_players: lines(opponent_players),
             plays,
         });
     }
