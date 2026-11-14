@@ -71,4 +71,8 @@ dd { margin: 0; }
 .stints { white-space: nowrap; color: #a39e94; font-size: 13px; }
 #sync button { background: none; border: 0; color: #f4f1ea; font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; padding: 0; margin-left: 6px; }
 #sync button:disabled { color: #8a847c; cursor: default; }
+.shots svg { max-width: 560px; display: block; }
+.shots .make { fill: #e07a3d; }
+.shots .miss { fill: none; stroke: #7eadd4; stroke-width: 1.2; }
+.shots svg[data-only="make"] .miss, .shots svg[data-only="miss"] .make { display: none; }
 .readout { color: #a39e94; font-size: 13px; min-height: 1.5em; }

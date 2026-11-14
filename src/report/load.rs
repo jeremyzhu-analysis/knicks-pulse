@@ -51,6 +51,13 @@ pub struct PlayRow {
     pub players: [Option<u32>; 3],
     /// Points the play scored.
     pub score_value: i32,
+    /// A shot, free throws included.
+    pub shooting: bool,
+    /// 2 or 3 on a field-goal attempt.
+    pub points_attempted: i32,
+    /// ESPN's court position (x across the floor, y out from the basket, in
+    /// feet); None where ESPN gives none.
+    pub position: Option<(i16, i16)>,
 }
 
 pub struct Opponent {
@@ -179,6 +186,10 @@ struct PlayDb {
     player2_id: Option<u32>,
     player3_id: Option<u32>,
     score_value: u8,
+    shooting: bool,
+    points_attempted: u8,
+    x: Option<i16>,
+    y: Option<i16>,
 }
 
 impl From<&TeamStatsDb> for BoxScore {
@@ -264,7 +275,7 @@ pub async fn load_dataset(pool: &MySqlPool, team_id: u32) -> Result<Dataset> {
     // double without a decimal crate.
     let plays = sqlx::query_as::<_, PlayDb>(sqlx::AssertSqlSafe(format!(
         "SELECT game_id, period, CAST(clock_s AS CHAR) clock_s, type_text, home_score, away_score,
-                player1_id, player2_id, player3_id, score_value
+                player1_id, player2_id, player3_id, score_value, shooting, points_attempted, x, y
            FROM plays WHERE game_id IN {TEAM_GAMES} ORDER BY game_id, ord"
     )))
     .bind(team_id)
@@ -361,6 +372,9 @@ pub async fn load_dataset(pool: &MySqlPool, team_id: u32) -> Result<Dataset> {
                     away_score: p.away_score.into(),
                     players: [p.player1_id, p.player2_id, p.player3_id],
                     score_value: p.score_value.into(),
+                    shooting: p.shooting,
+                    points_attempted: p.points_attempted.into(),
+                    position: p.x.zip(p.y),
                 })
             })
             .collect::<Result<_>>()?;

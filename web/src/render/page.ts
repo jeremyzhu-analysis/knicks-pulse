@@ -4,11 +4,13 @@ import type { LatestGame } from "../api/LatestGame.ts";
 import type { PlayerRow } from "../api/PlayerRow.ts";
 import type { Report } from "../api/Report.ts";
 import type { Season } from "../api/Season.ts";
+import type { ShotMap } from "../api/ShotMap.ts";
 import { dateTime, escapeHtml as e, fixed, lastName, longDate, percent, record, shortDate, signed } from "../format.ts";
 import { heat, marginChart, quarterChart, ROLLING_DEFAULT } from "./charts.ts";
 import { knicksMark, liberty } from "./brand.ts";
 import { hosted, margin, site, won } from "./game.ts";
 import { impactLabel, impactTitle } from "./impact.ts";
+import { shotMap, shotSeason } from "./shots.ts";
 import { LAYERS, type ReportView } from "../route.ts";
 import { syncControl } from "../sync.ts";
 
@@ -23,10 +25,10 @@ const cell = (value: number, scale: number, text: string, extra = "") => {
   return `<span class="cell${extra}" style="background:${bg};color:${fg}">${text}</span>`;
 };
 
-/** Season switch plus one panel per season; the current season starts visible. */
-function seasonPanels(report: PageData, body: (season: Season) => string): string {
+/** Season switch plus one panel per season; the current season starts visible unless `open` names another. */
+function seasonPanels(report: PageData, body: (season: Season) => string, open: string | null = null): string {
   const panels = [...report.seasons].reverse();
-  const on = report.current?.key;
+  const on = open ?? report.current?.key;
   const buttons = panels
     .map((s) => `<button type="button" data-pick="${s.key}" class="${s.key === on ? "on" : ""}">${e(s.label)}</button>`)
     .join("");
@@ -348,6 +350,16 @@ function playersSection(report: PageData): string {
 </section>`;
 }
 
+function shotsSection(report: PageData, maps: ShotMap[], player: string | null): string {
+  const open = shotSeason(maps, report.seasons, player, report.currentKey);
+  return `<section>
+  <p class="kicker">Players / Shots</p>
+  <h2>Where the shots come from</h2>
+  <p>Every Knicks field-goal attempt inside half court. Orange dot made, blue ring missed.</p>
+  ${seasonPanels(report, (s) => shotMap(maps.find((m) => m.key === s.key), s.key === open ? player : null), open)}
+</section>`;
+}
+
 /** By "layer/tab", as in route.ts. */
 const SECTIONS: Record<string, (report: PageData) => string> = {
   "team/season": seasonCards,
@@ -359,8 +371,11 @@ const SECTIONS: Record<string, (report: PageData) => string> = {
   "players/pairs": pairsSection,
 };
 
-/** Everything inside <body>: header, navigation, the hero, the tab in view, and the footer. */
-export function renderBody(api: Report, view: ReportView): string {
+/**
+ * Everything inside <body>: header, navigation, the hero, the tab in view, and
+ * the footer. `shots` is needed for the Shots tab only.
+ */
+export function renderBody(api: Report, view: ReportView, shots: ShotMap[] | null): string {
   const season = (key: string | null) => api.seasons.find((s) => s.key === key) ?? null;
   const report: PageData = { ...api, current: season(api.currentKey), lastRegular: season(api.lastRegularKey) };
   const updated = report.syncedAt ? `Updated ${dateTime(report.syncedAt)}` : "No data yet";
@@ -368,7 +383,7 @@ export function renderBody(api: Report, view: ReportView): string {
 <main>
 ${layerNav(view.layer, view.tab)}
 ${hero(report)}
-${report.current ? (SECTIONS[`${view.layer}/${view.tab}`]?.(report) ?? "") : ""}
+${!report.current ? "" : shots && view.tab === "shots" ? shotsSection(report, shots, view.arg) : (SECTIONS[`${view.layer}/${view.tab}`]?.(report) ?? "")}
 </main>
 <footer>
   <p>ESPN box scores and play-by-play. ${updated}. ${report.gameCount} games. On-court splits keep a game when the lineup replay is within ${report.replayTolerance} points of the box plus-minus (${report.replayedGames} of ${report.gameCount} kept).</p>

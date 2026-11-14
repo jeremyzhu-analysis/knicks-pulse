@@ -10,14 +10,15 @@ renders it in the browser.
 
 - Rust, version pinned in `rust-toolchain.toml`. One binary, `knicks`, with
   three commands: `serve`, `migrate` and `sync`. Axum serves `/api/report`,
-  `/api/games/{id}`, `/api/players/{id}`, `/api/sync` and the built page, sqlx talks to MySQL, and
+  `/api/games/{id}`, `/api/players/{id}`, `/api/shots`, `/api/sync` and the built page, sqlx talks to MySQL, and
   reqwest fetches ESPN.
   The ESPN client trusts Mozilla's root certificates compiled into the
   binary (`webpki-root-certs`), not the macOS keychain.
 - The page is plain TypeScript built with Vite (`web/`). It fetches
   `/api/report` and writes the HTML one tab at a time, in two layers: Team
   (`#team/season`, `games`, `quarters`, `factors`, `situations`) and Players
-  (`#players/impact`, `pairs`). `#game/{id}` shows one game from
+  (`#players/impact`, `pairs`, `shots`; `#players/shots/{id}` opens the
+  shot map on one player). `#game/{id}` shows one game from
   `/api/games/{id}` and `#player/{id}` one player from `/api/players/{id}`. The routes are in `web/src/route.ts`. The API's TypeScript types in
   `web/src/api/` are generated from the Rust structs by ts-rs whenever
   `cargo test` runs; don't edit them by hand.
@@ -131,6 +132,10 @@ Other free sources checked:
 - A player's quarter splits use the same replay: net points per game and the
   opponent's points per 48 minutes while the player was on the floor in that
   quarter.
+- The shot map draws the Knicks' field-goal attempts that ESPN places inside
+  half court (x from −2 to 52 feet, y from −8 to 45 feet out from the basket).
+  A heave from the backcourt is left off the map and out of its counts, so a
+  player's attempts there can be a few short of the box score.
 - Game score is `PTS + 0.4·FGM − 0.7·FGA − 0.4·(FTA − FTM) + 0.7·OREB +
   0.3·DREB + STL + 0.7·AST + 0.7·BLK − 0.4·PF − TOV`.
 - The impact label's thresholds are in the `impact` module of

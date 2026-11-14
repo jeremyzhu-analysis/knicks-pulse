@@ -64,7 +64,7 @@ export function renderPlayer(player: PlayerDetail): string {
   return page(`<section>
   <p class="kicker">${player.position ? e(player.position) : "Player"}</p>
   <h1>${e(player.name)}</h1>
-  <p><span class="chip ${latest.row.impact.tone}">${impactLabel(latest.row)}</span> ${e(impactTitle(latest.row))}</p>
+  <p><span class="chip ${latest.row.impact.tone}">${impactLabel(latest.row)}</span> ${e(impactTitle(latest.row))} <a href="#players/shots/${player.id}">Shot map</a></p>
   ${lines}
   <p class="note">Per game, except: usage is the share of Knicks possessions the player ended while on the floor; On and Off are the Knicks' net points per 48 minutes with the player on the floor and on the bench; Opp/48 is what opponents scored with the player on.</p>
 </section>

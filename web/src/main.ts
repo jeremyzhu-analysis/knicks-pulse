@@ -1,10 +1,12 @@
 import "./styles.css";
 import type { Report } from "./api/Report.ts";
+import type { ShotMap } from "./api/ShotMap.ts";
 import type { GameDetail } from "./api/GameDetail.ts";
 import type { PlayerDetail } from "./api/PlayerDetail.ts";
 import { renderGame, renderGameNotFound } from "./render/gamePage.ts";
 import { renderBody } from "./render/page.ts";
 import { renderPlayer, renderPlayerNotFound } from "./render/playerPage.ts";
+import { wireShots } from "./render/shots.ts";
 import { parseHash, type View } from "./route.ts";
 import { startSync } from "./sync.ts";
 
@@ -86,7 +88,8 @@ async function html(view: View): Promise<string> {
   }
   const report = await load<Report>("/api/report");
   if (!report) throw new Error("/api/report answered 404");
-  return renderBody(report, view);
+  const shots = view.tab === "shots" ? await load<ShotMap[]>("/api/shots") : null;
+  return renderBody(report, view, shots);
 }
 
 /** The page on screen, to tell a change of tab from a change of page. */
@@ -104,6 +107,7 @@ async function show(): Promise<void> {
     document.body.innerHTML = body;
     showing = view.page;
     wire();
+    wireShots();
     if (!keepScroll) window.scrollTo(0, 0);
   } catch (error) {
     console.error(error);

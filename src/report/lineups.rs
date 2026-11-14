@@ -396,6 +396,9 @@ mod tests {
             away_score: away,
             players: [Some(a), Some(b), None],
             score_value: 0,
+            shooting: false,
+            points_attempted: 0,
+            position: None,
         }
     }
 

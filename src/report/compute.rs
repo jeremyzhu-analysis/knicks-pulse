@@ -1033,6 +1033,103 @@ pub fn game_players(
     players
 }
 
+// ---------------------------------------------------------------- shots
+
+/// The half court the shot map draws, in ESPN's feet: x across the floor, y
+/// out from the basket. Attempts from outside it (heaves from the backcourt)
+/// are left off the map and out of its counts.
+const SHOT_X: std::ops::RangeInclusive<i16> = -2..=52;
+const SHOT_Y: std::ops::RangeInclusive<i16> = -8..=45;
+
+#[derive(Serialize, TS)]
+#[ts(export)]
+pub struct Shot {
+    /// Player id.
+    pub p: u32,
+    pub x: i16,
+    pub y: i16,
+    pub made: bool,
+    /// 2 or 3.
+    pub value: i32,
+    pub period: i32,
+}
+
+#[derive(Serialize, TS)]
+#[ts(export)]
+pub struct Shooter {
+    pub id: u32,
+    pub last: String,
+    pub makes: i32,
+    pub attempts: i32,
+}
+
+/// The report team's field-goal attempts of one season.
+#[derive(Serialize, TS)]
+#[ts(export)]
+pub struct ShotMap {
+    /// As in `Season`.
+    pub key: String,
+    /// Most attempts first.
+    pub players: Vec<Shooter>,
+    pub makes: i32,
+    pub attempts: i32,
+    /// In game order.
+    pub shots: Vec<Shot>,
+}
+
+pub fn shot_map(key: &str, games: &[&Game]) -> ShotMap {
+    let mut shots = Vec::new();
+    let mut players: Vec<Shooter> = Vec::new();
+    for game in games {
+        for play in &game.plays {
+            let (Some(shooter), Some((x, y))) = (play.players[0], play.position) else {
+                continue;
+            };
+            if !play.shooting
+                || play.points_attempted < 2
+                || !SHOT_X.contains(&x)
+                || !SHOT_Y.contains(&y)
+            {
+                continue;
+            }
+            let Some(line) = game.players.iter().find(|p| p.player_id == shooter) else {
+                continue;
+            };
+            let made = play.score_value > 0;
+            let i = players
+                .iter()
+                .position(|p| p.id == shooter)
+                .unwrap_or_else(|| {
+                    players.push(Shooter {
+                        id: shooter,
+                        last: last_name(&line.full_name),
+                        makes: 0,
+                        attempts: 0,
+                    });
+                    players.len() - 1
+                });
+            players[i].attempts += 1;
+            players[i].makes += i32::from(made);
+            shots.push(Shot {
+                p: shooter,
+                x,
+                y,
+                made,
+                value: play.points_attempted,
+                period: play.period,
+            });
+        }
+    }
+    players.sort_by_key(|p| std::cmp::Reverse(p.attempts));
+    ShotMap {
+        key: key.to_string(),
+        makes: players.iter().map(|p| p.makes).sum(),
+        attempts: players.iter().map(|p| p.attempts).sum(),
+        players,
+        shots,
+    }
+}
+
 // ---------------------------------------------------------------- report
 
 pub struct SeasonReport<'a> {

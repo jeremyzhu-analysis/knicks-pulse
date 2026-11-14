@@ -17,11 +17,13 @@ export const LAYERS = [
     tabs: [
       { id: "impact", label: "Impact" },
       { id: "pairs", label: "Pairings" },
+      { id: "shots", label: "Shots" },
     ],
   },
 ] as const;
 
-export type ReportView = { page: "report"; layer: string; tab: string };
+/** `arg` is what follows the tab: the player of "#players/shots/3934672". */
+export type ReportView = { page: "report"; layer: string; tab: string; arg: string | null };
 export type View = ReportView | { page: "game"; id: string } | { page: "player"; id: string };
 
 /** The section anchors of the single-page report, so links to them still land on the right tab. */
@@ -35,12 +37,12 @@ const ANCHORS: Record<string, string> = {
   players: "players/impact",
 };
 
-/** "#team/games", "#game/401…", "#player/3934672"; anything unknown is the first tab. */
+/** "#team/games", "#players/shots/3934672", "#game/401…", "#player/3934672"; anything unknown is the first tab. */
 export function parseHash(hash: string): View {
   const path = hash.replace(/^#/, "");
-  const [first = "", second = ""] = (ANCHORS[path] ?? path).split("/");
+  const [first = "", second = "", third = ""] = (ANCHORS[path] ?? path).split("/");
   if ((first === "game" || first === "player") && second) return { page: first, id: second };
   const layer = LAYERS.find((l) => l.id === first) ?? LAYERS[0];
   const tab = layer.tabs.find((t) => t.id === second) ?? layer.tabs[0];
-  return { page: "report", layer: layer.id, tab: tab.id };
+  return { page: "report", layer: layer.id, tab: tab.id, arg: third || null };
 }

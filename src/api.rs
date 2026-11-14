@@ -8,9 +8,9 @@ use ts_rs::TS;
 use crate::report::compute::PAIR_MIN_SECONDS;
 use crate::report::compute::{
     Factors, GamePlayer, GameSide, LastSeries, PeriodPoints, PlayerReport, PlayerRow, QuarterRow,
-    Ratings, Report as Computed, Rolling, SeasonReport, Situation, build_report, factors, flow,
-    game_players, game_sides, points_by_period, quarters, ratings, rolling_margins, situations,
-    won,
+    Ratings, Report as Computed, Rolling, SeasonReport, ShotMap, Situation, build_report, factors,
+    flow, game_players, game_sides, points_by_period, quarters, ratings, rolling_margins, shot_map,
+    situations, won,
 };
 use crate::report::dates::new_york;
 use crate::report::lineups::{GameMoment, REPLAY_TOLERANCE, replay_game};
@@ -235,7 +235,7 @@ fn player_details(seasons: &[SeasonReport], points: &PeriodPoints) -> Vec<Player
     details
 }
 
-pub fn game_detail(g: &load::Game) -> GameDetail {
+fn game_detail(g: &load::Game) -> GameDetail {
     let replay = replay_game(g);
     let flow = flow(g);
     let (us, them) = game_sides(g, &flow);
@@ -290,8 +290,30 @@ fn season(s: SeasonReport) -> Season {
     }
 }
 
-/// The report, and the page of every player in it.
-pub fn report(data: &Dataset) -> Result<(Report, Vec<PlayerDetail>)> {
+/// Every document the API serves, by path, as JSON.
+pub fn documents(data: &Dataset) -> Result<Vec<(String, Vec<u8>)>> {
+    let mut documents = Vec::new();
+    for g in &data.games {
+        documents.push((
+            format!("/api/games/{}", g.id),
+            serde_json::to_vec(&game_detail(g))?,
+        ));
+    }
+    let (report, players, shots) = report(data)?;
+    for player in &players {
+        documents.push((
+            format!("/api/players/{}", player.id),
+            serde_json::to_vec(player)?,
+        ));
+    }
+    documents.push(("/api/shots".to_string(), serde_json::to_vec(&shots)?));
+    documents.push(("/api/report".to_string(), serde_json::to_vec(&report)?));
+    Ok(documents)
+}
+
+/// The report, the page of every player in it, and each season's shot map
+/// (`GET /api/shots`), most recent season first.
+fn report(data: &Dataset) -> Result<(Report, Vec<PlayerDetail>, Vec<ShotMap>)> {
     let Computed {
         game_count,
         replayed_games,
@@ -303,6 +325,10 @@ pub fn report(data: &Dataset) -> Result<(Report, Vec<PlayerDetail>)> {
         points,
     } = build_report(data);
     let players = player_details(&seasons, &points);
+    let shots = seasons
+        .iter()
+        .map(|s| shot_map(&s.season.key, &s.season.games))
+        .collect();
     let now = current.map(|i| seasons[i].season.games.as_slice());
     let was = last_regular.map(|i| seasons[i].season.games.as_slice());
     let tz = new_york()?;
@@ -343,5 +369,5 @@ pub fn report(data: &Dataset) -> Result<(Report, Vec<PlayerDetail>)> {
         factors,
         situations,
     };
-    Ok((report, players))
+    Ok((report, players, shots))
 }

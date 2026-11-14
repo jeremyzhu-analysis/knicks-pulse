@@ -5,9 +5,9 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use axum::Router;
 use axum::body::Bytes;
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
-use axum::http::{HeaderMap, HeaderValue, Response, StatusCode};
+use axum::http::{HeaderMap, HeaderValue, Response, StatusCode, Uri};
 use axum::response::IntoResponse;
 use axum::routing::get;
 use sqlx::mysql::MySqlPool;
@@ -23,51 +23,31 @@ use crate::{api, sync};
 /// Built by `npm run build`; paths are relative to the repo root.
 const DIST: &str = "web/dist";
 
-/// The API's JSON, ready to send.
-struct Built {
-    report: Bytes,
-    /// By game id.
-    games: HashMap<String, Bytes>,
-    /// By player id.
-    players: HashMap<String, Bytes>,
-}
-
 struct AppState {
     pool: MySqlPool,
-    /// The JSON only changes when a sync stores games, so it's built once
-    /// and kept until then. The lock also makes concurrent first requests wait
-    /// for one build instead of starting their own.
-    built: Mutex<Option<Arc<Built>>>,
+    /// The API's documents by path, ready to send. They only change when a
+    /// sync stores games, so they're built once and kept until then. The lock
+    /// also makes concurrent first requests wait for one build instead of
+    /// starting their own.
+    built: Mutex<Option<Arc<HashMap<String, Bytes>>>>,
     espn: Espn,
     /// Held for the length of a sync, so two never run at once.
     syncing: Mutex<()>,
 }
 
 impl AppState {
-    async fn built(&self) -> Result<Arc<Built>> {
+    async fn built(&self) -> Result<Arc<HashMap<String, Bytes>>> {
         let mut cached = self.built.lock().await;
         if let Some(built) = cached.as_ref() {
             return Ok(built.clone());
         }
         let data = load_dataset(&self.pool, TEAM_ID).await?;
-        let mut games = HashMap::new();
-        for game in &data.games {
-            let json = serde_json::to_vec(&api::game_detail(game))?;
-            games.insert(game.id.clone(), Bytes::from(json));
-        }
-        let (report, player_details) = api::report(&data)?;
-        let mut players = HashMap::new();
-        for player in &player_details {
-            players.insert(
-                player.id.to_string(),
-                Bytes::from(serde_json::to_vec(player)?),
-            );
-        }
-        let built = Arc::new(Built {
-            report: Bytes::from(serde_json::to_vec(&report)?),
-            games,
-            players,
-        });
+        let built: Arc<HashMap<String, Bytes>> = Arc::new(
+            api::documents(&data)?
+                .into_iter()
+                .map(|(path, json)| (path, Bytes::from(json)))
+                .collect(),
+        );
         *cached = Some(built.clone());
         Ok(built)
     }
@@ -108,19 +88,10 @@ fn server_error(error: anyhow::Error) -> axum::response::Response {
     (StatusCode::INTERNAL_SERVER_ERROR, "Something went wrong.").into_response()
 }
 
-async fn report(State(state): State<Arc<AppState>>) -> axum::response::Response {
+/// One of the built documents, by the request's path.
+async fn document(State(state): State<Arc<AppState>>, uri: Uri) -> axum::response::Response {
     match state.built().await {
-        Ok(built) => json_response(built.report.clone()),
-        Err(error) => server_error(error),
-    }
-}
-
-async fn game_detail(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-) -> axum::response::Response {
-    match state.built().await {
-        Ok(built) => match built.games.get(&id) {
+        Ok(built) => match built.get(uri.path()) {
             Some(json) => json_response(json.clone()),
             None => (StatusCode::NOT_FOUND, "Not found").into_response(),
         },
@@ -165,19 +136,6 @@ async fn sync_now(
     }
 }
 
-async fn player_detail(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-) -> axum::response::Response {
-    match state.built().await {
-        Ok(built) => match built.players.get(&id) {
-            Some(json) => json_response(json.clone()),
-            None => (StatusCode::NOT_FOUND, "Not found").into_response(),
-        },
-        Err(error) => server_error(error),
-    }
-}
-
 /// Only successful responses get a cache header; errors stay uncached.
 fn cache_on_success<B>(
     value: &'static str,
@@ -195,9 +153,10 @@ fn app(state: Arc<AppState>) -> Router {
     let assets = ServeDir::new(format!("{DIST}/assets")).not_found_service(get(not_found));
     let pages = ServeDir::new(DIST).not_found_service(get(not_found));
     Router::new()
-        .route("/api/report", get(report))
-        .route("/api/games/{id}", get(game_detail))
-        .route("/api/players/{id}", get(player_detail))
+        .route("/api/report", get(document))
+        .route("/api/shots", get(document))
+        .route("/api/games/{id}", get(document))
+        .route("/api/players/{id}", get(document))
         .route("/api/sync", get(sync_status).post(sync_now))
         .with_state(state)
         .nest_service(
