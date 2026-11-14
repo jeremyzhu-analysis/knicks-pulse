@@ -99,6 +99,12 @@ CREATE TABLE IF NOT EXISTS game_players (
   FOREIGN KEY (player_id) REFERENCES players (id)
 );
 
+-- One row, id 1: when a sync last ran to the end.
+CREATE TABLE IF NOT EXISTS sync_status (
+  id TINYINT UNSIGNED PRIMARY KEY,
+  checked_at DATETIME NOT NULL
+);
+
 -- Play-by-play in ESPN's order (ord). clock_s is seconds left in the period.
 -- For substitutions player1 enters and player2 leaves.
 -- shooting marks shots, free throws included; points_attempted is 2 or 3 on a

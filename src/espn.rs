@@ -48,7 +48,7 @@ impl Espn {
     }
 
     /// Up to 3 attempts; only 5xx answers are retried, after 1 s and then 2 s.
-    async fn get_json<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
+    pub(crate) async fn get_json<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
         for attempt in 1u64.. {
             let res = self
                 .http
@@ -95,7 +95,7 @@ impl Espn {
             .or(season_year)
             .filter(|&y| y != 0);
         let season_year = year.ok_or_else(|| anyhow!("ESPN schedule has no requestedSeason"))?;
-        let completed_game_ids = json
+        let completed_games = json
             .events
             .unwrap_or_default()
             .into_iter()
@@ -110,11 +110,20 @@ impl Espn {
                     .and_then(|t| t.completed)
                     == Some(true)
             })
-            .map(|event| event.id)
+            .map(|event| ScheduleGame {
+                note: event
+                    .competitions
+                    .and_then(|c| c.into_iter().next())
+                    .and_then(|c| c.notes)
+                    .and_then(|notes| notes.into_iter().next())
+                    .and_then(|note| note.headline)
+                    .filter(|headline| !headline.is_empty()),
+                id: event.id,
+            })
             .collect();
         Ok(Schedule {
             season_year,
-            completed_game_ids,
+            completed_games,
         })
     }
 
@@ -128,7 +137,13 @@ impl Espn {
 
 pub struct Schedule {
     pub season_year: i32,
-    pub completed_game_ids: Vec<String>,
+    pub completed_games: Vec<ScheduleGame>,
+}
+
+pub struct ScheduleGame {
+    pub id: String,
+    /// The playoff series and game, as in "East 1st Round - Game 7".
+    pub note: Option<String>,
 }
 
 pub struct Team {
@@ -428,7 +443,7 @@ pub(crate) fn court_position(x: Option<f64>, y: Option<f64>) -> Option<(i16, i16
 }
 
 /// ESPN's dates often have no seconds: "2026-11-03T00:30Z".
-fn parse_espn_date(value: &str) -> Result<Timestamp> {
+pub(crate) fn parse_espn_date(value: &str) -> Result<Timestamp> {
     value
         .parse()
         .with_context(|| format!("ESPN date {value:?}"))
@@ -436,7 +451,7 @@ fn parse_espn_date(value: &str) -> Result<Timestamp> {
 
 /// Like JavaScript `parseInt(value, 10)`: leading whitespace, an optional sign,
 /// then digits; anything unparsable is 0.
-fn int(value: Option<&str>) -> i64 {
+pub(crate) fn int(value: Option<&str>) -> i64 {
     let text = value.unwrap_or("").trim_start();
     let (negative, rest) = match text.as_bytes().first() {
         Some(b'-') => (true, &text[1..]),
@@ -480,7 +495,7 @@ pub fn parse_clock(value: &str) -> f64 {
 }
 
 /// MySQL VARCHAR lengths count characters.
-fn truncate(text: &str, max: usize) -> String {
+pub(crate) fn truncate(text: &str, max: usize) -> String {
     text.chars().take(max).collect()
 }
 
@@ -507,6 +522,12 @@ struct EventJson {
 #[derive(Deserialize)]
 struct EventCompetitionJson {
     status: Option<EventStatusJson>,
+    notes: Option<Vec<EventNoteJson>>,
+}
+
+#[derive(Deserialize)]
+struct EventNoteJson {
+    headline: Option<String>,
 }
 
 #[derive(Deserialize)]

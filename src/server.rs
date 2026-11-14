@@ -32,7 +32,7 @@ struct Built {
 
 struct AppState {
     pool: MySqlPool,
-    /// The JSON only changes when a sync stores new games, so it's built once
+    /// The JSON only changes when a sync stores games, so it's built once
     /// and kept until then. The lock also makes concurrent first requests wait
     /// for one build instead of starting their own.
     built: Mutex<Option<Arc<Built>>>,
@@ -147,7 +147,7 @@ async fn sync_loop(state: Arc<AppState>, minutes: u64) {
             ticks.tick().await;
         }
         match sync::sync_games(&state.pool, &espn, |line| println!("[sync] {line}")).await {
-            Ok(result) if result.added > 0 => *state.built.lock().await = None,
+            Ok(result) if result.added + result.updated > 0 => *state.built.lock().await = None,
             Ok(_) => {}
             Err(error) => eprintln!("[sync] failed: {error:#}"),
         }

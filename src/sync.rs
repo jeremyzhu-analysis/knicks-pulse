@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
 use sqlx::mysql::MySqlPool;
@@ -14,58 +14,106 @@ const STORE_FORMAT: u8 = 2;
 
 pub struct SyncResult {
     pub completed: usize,
+    /// Games stored for the first time.
     pub added: usize,
+    /// Games that were stored before and written again.
+    pub updated: usize,
 }
+
+/// ESPN corrects box scores and play-by-play for a while after the final
+/// buzzer, so a game is fetched again on every sync until this long after its
+/// start.
+const SETTLE_HOURS: u8 = 36;
 
 /// Stores every completed game of the current and previous season (regular
 /// season and playoffs) that isn't in the database in the current
-/// STORE_FORMAT. Callers must not run two syncs at once.
+/// STORE_FORMAT, or that started within SETTLE_HOURS. Callers must not run two
+/// syncs at once.
 pub async fn sync_games(pool: &MySqlPool, espn: &Espn, log: impl Fn(&str)) -> Result<SyncResult> {
     let current = espn.schedule(TEAM_SLUG, None, REGULAR_SEASON).await?;
     let year = current.season_year;
     let schedules = [
-        current,
-        espn.schedule(TEAM_SLUG, Some(year), PLAYOFFS).await?,
-        espn.schedule(TEAM_SLUG, Some(year - 1), REGULAR_SEASON)
-            .await?,
-        espn.schedule(TEAM_SLUG, Some(year - 1), PLAYOFFS).await?,
+        (REGULAR_SEASON, current),
+        (
+            PLAYOFFS,
+            espn.schedule(TEAM_SLUG, Some(year), PLAYOFFS).await?,
+        ),
+        (
+            REGULAR_SEASON,
+            espn.schedule(TEAM_SLUG, Some(year - 1), REGULAR_SEASON)
+                .await?,
+        ),
+        (
+            PLAYOFFS,
+            espn.schedule(TEAM_SLUG, Some(year - 1), PLAYOFFS).await?,
+        ),
     ];
     let mut seen = HashSet::new();
-    let ids: Vec<String> = schedules
+    let listed: Vec<Listed> = schedules
         .into_iter()
-        .flat_map(|s| s.completed_game_ids)
-        .filter(|id| seen.insert(id.clone()))
+        .flat_map(|(season_type, schedule)| {
+            let season_year = schedule.season_year;
+            schedule
+                .completed_games
+                .into_iter()
+                .map(move |game| Listed {
+                    id: game.id,
+                    season_year,
+                    season_type,
+                    note: game.note,
+                })
+        })
+        .filter(|game| seen.insert(game.id.clone()))
         .collect();
 
-    let stored: HashSet<String> =
-        sqlx::query_scalar::<_, u64>("SELECT id FROM games WHERE store_format = ?")
-            .bind(STORE_FORMAT)
-            .fetch_all(pool)
-            .await?
-            .into_iter()
-            .map(|id| id.to_string())
-            .collect();
-    let missing: Vec<&String> = ids.iter().filter(|id| !stored.contains(*id)).collect();
+    // id -> whether the stored game can be left as it is.
+    let stored: HashMap<String, bool> = sqlx::query_as::<_, (u64, bool)>(
+        "SELECT id, store_format = ? AND starts_at <= UTC_TIMESTAMP() - INTERVAL ? HOUR FROM games",
+    )
+    .bind(STORE_FORMAT)
+    .bind(SETTLE_HOURS)
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|(id, settled)| (id.to_string(), settled))
+    .collect();
+    let to_fetch: Vec<&Listed> = listed
+        .iter()
+        .filter(|game| stored.get(&game.id) != Some(&true))
+        .collect();
     log(&format!(
         "{} completed games, {} to fetch.",
-        ids.len(),
-        missing.len()
+        listed.len(),
+        to_fetch.len()
     ));
 
     let new_york = new_york()?;
-    let mut added = 0;
-    for id in missing {
+    let (mut added, mut updated) = (0, 0);
+    for listed in to_fetch {
+        let id = &listed.id;
         let game = match espn.game_summary(id).await {
             Ok(game) => game,
-            // ESPN lists some finished games whose summary answers 404. Skipping
-            // leaves them unstored, so every later sync asks for them again.
-            Err(error)
-                if error
-                    .downcast_ref::<EspnHttpError>()
-                    .is_some_and(|e| e.status == 404) =>
-            {
-                log(&format!("Skipped game {id}: ESPN has no summary for it."));
-                continue;
+            // ESPN lists some finished games whose summary answers 404; its
+            // core API still has them.
+            Err(error) if is_not_found(&error) => {
+                let core = espn
+                    .core_game_summary(
+                        id,
+                        listed.season_year.into(),
+                        listed.season_type.into(),
+                        listed.note.clone(),
+                    )
+                    .await;
+                match core {
+                    Ok(game) => game,
+                    // With neither source the game stays unstored, so every
+                    // later sync asks for it again.
+                    Err(error) if is_not_found(&error) => {
+                        log(&format!("Skipped game {id}: ESPN has no data for it."));
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                }
             }
             Err(error) => return Err(error),
         };
@@ -73,9 +121,15 @@ pub async fn sync_games(pool: &MySqlPool, espn: &Espn, log: impl Fn(&str)) -> Re
             continue;
         }
         store_game(pool, &game).await?;
-        added += 1;
+        let verb = if stored.contains_key(id) {
+            updated += 1;
+            "Updated"
+        } else {
+            added += 1;
+            "Stored"
+        };
         log(&format!(
-            "Stored {} {} {} at {} {}",
+            "{verb} {} {} {} at {} {}",
             game.starts_at
                 .to_zoned(new_york.clone())
                 .strftime("%Y-%m-%d"),
@@ -85,10 +139,31 @@ pub async fn sync_games(pool: &MySqlPool, espn: &Espn, log: impl Fn(&str)) -> Re
             game.home_score
         ));
     }
+    sqlx::query(
+        "INSERT INTO sync_status (id, checked_at) VALUES (1, UTC_TIMESTAMP())
+         ON DUPLICATE KEY UPDATE checked_at = VALUES(checked_at)",
+    )
+    .execute(pool)
+    .await?;
     Ok(SyncResult {
-        completed: ids.len(),
+        completed: listed.len(),
         added,
+        updated,
     })
+}
+
+/// A completed game as a schedule lists it.
+struct Listed {
+    id: String,
+    season_year: i32,
+    season_type: u8,
+    note: Option<String>,
+}
+
+fn is_not_found(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<EspnHttpError>()
+        .is_some_and(|e| e.status == 404)
 }
 
 /// One transaction per game; a failure leaves nothing of the game behind.

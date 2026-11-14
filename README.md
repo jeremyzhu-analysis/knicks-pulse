@@ -65,8 +65,12 @@ aren't stored yet, and the stored ones written in an older format: each game
 records the `STORE_FORMAT` (`src/sync.rs`) it was stored with, so after an
 update that stores more per game, run `cargo run -- migrate` and the next sync
 fetches every game once more.
-A game whose ESPN summary answers 404 is skipped and asked for again on every
-sync. The report and game JSON are computed once and kept until a sync stores new games.
+ESPN corrects a game for a while after it ends, so a game is also fetched
+again on every sync until 36 hours after its start. A game whose ESPN summary
+answers 404 is read from ESPN's core API instead (about 65 small requests);
+when that has nothing either, the game is skipped and asked for again on
+every sync. The time a sync last ran to the end is kept in `sync_status`. The
+report and game JSON are computed once and kept until a sync stores a game.
 
 ## Data source
 
@@ -75,8 +79,9 @@ notice. The design's footer names it as its source, and its numbers match.
 
 | Endpoint | Used for |
 | --- | --- |
-| `site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/ny/schedule?season=YYYY&seasontype=2\|3` | Completed game ids per season (2 regular season, 3 playoffs). Without `season` it returns the current one. |
+| `site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/ny/schedule?season=YYYY&seasontype=2\|3` | Completed game ids per season (2 regular season, 3 playoffs), with the playoff series note. Without `season` it returns the current one. |
 | `site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=ID` | Score by quarter, team and player box scores, play-by-play with substitutions and shot positions, attendance, neutral site. |
+| `sports.core.api.espn.com/v2/sports/basketball/leagues/nba/events/ID/competitions/ID` and the documents it links (`plays`, and per team `roster`, `statistics`, `linescores`, `score`, each player's `statistics/0`) | The same game data, for games whose summary answers 404. |
 
 The sync stores the current and previous season, regular season and playoffs.
 
@@ -117,7 +122,8 @@ db/schema.sql          tables (datetimes in UTC)
 src/main.rs            the knicks commands: serve, migrate, sync
 src/server.rs          HTTP server, JSON cache, sync timer
 src/espn.rs            ESPN client and parsing
-src/sync.rs            stores new completed games
+src/espn_core.rs       a game from ESPN's core API, when the summary is missing
+src/sync.rs            stores completed games
 src/report/            load from MySQL, lineup replay, metrics
 src/api.rs             the JSON the page reads
 web/src/               the page: HTML, SVG charts, CSS, number formatting

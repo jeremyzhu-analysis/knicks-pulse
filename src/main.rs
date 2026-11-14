@@ -2,6 +2,7 @@ mod api;
 mod config;
 mod db;
 mod espn;
+mod espn_core;
 mod report;
 mod server;
 mod sync;
@@ -26,8 +27,8 @@ async fn main() -> Result<()> {
             pool.close().await;
             let result = result?;
             println!(
-                "Done. {} new games, {} completed games in total.",
-                result.added, result.completed
+                "Done. {} new games, {} updated, {} completed games in total.",
+                result.added, result.updated, result.completed
             );
         }
         _ => bail!(USAGE),
