@@ -321,6 +321,84 @@ pub fn quarters(now: &[&Game], was: Option<&[&Game]>) -> Vec<QuarterRow> {
         .collect()
 }
 
+// ---------------------------------------------------------------- headline
+
+/// What the hero leads with: the number that moved most since last season.
+#[derive(Serialize, TS, PartialEq, Debug)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+#[ts(export)]
+pub enum Headline {
+    /// No last season to compare with.
+    Games {
+        games: i32,
+    },
+    /// Points per 100 possessions scored, against last season.
+    Offense {
+        change: f64,
+    },
+    /// Points per 100 possessions allowed, against last season.
+    Defense {
+        change: f64,
+    },
+    Quarter {
+        quarter: i32,
+        margin: f64,
+        was: f64,
+    },
+    /// Nothing moved by a full point.
+    Net {
+        net: f64,
+        was: f64,
+    },
+}
+
+/// A change smaller than this doesn't make the headline.
+const HEADLINE_MIN_CHANGE: f64 = 1.0;
+/// A quarter's margin can make the headline from this many games.
+const HEADLINE_QUARTER_GAMES: i32 = 2;
+
+/// The largest change among offense, defense and each quarter's margin; the
+/// earlier of two equal ones, in that order.
+pub fn headline(now: &Ratings, was: Option<&Ratings>, quarters: &[QuarterRow]) -> Headline {
+    let Some(was) = was.filter(|w| w.games > 0) else {
+        return Headline::Games { games: now.games };
+    };
+    let offense = now.offense - was.offense;
+    let defense = now.defense - was.defense;
+    let mut stories = vec![
+        (offense.abs(), Headline::Offense { change: offense }),
+        (defense.abs(), Headline::Defense { change: defense }),
+    ];
+    if now.games >= HEADLINE_QUARTER_GAMES {
+        for q in quarters {
+            if let Some(last) = q.last_margin {
+                stories.push((
+                    (q.margin - last).abs(),
+                    Headline::Quarter {
+                        quarter: q.quarter,
+                        margin: q.margin,
+                        was: last,
+                    },
+                ));
+            }
+        }
+    }
+    let mut best = stories.remove(0);
+    for story in stories {
+        if story.0 > best.0 {
+            best = story;
+        }
+    }
+    if best.0 >= HEADLINE_MIN_CHANGE {
+        best.1
+    } else {
+        Headline::Net {
+            net: now.net,
+            was: was.net,
+        }
+    }
+}
+
 // ---------------------------------------------------------------- situations
 
 #[derive(Serialize, TS)]
@@ -1146,6 +1224,49 @@ pub struct LastSeries {
     pub opponent: String,
 }
 
+/// A stored season that ended with the title.
+#[derive(Serialize, TS)]
+#[ts(export)]
+pub struct Champion {
+    /// The Finals.
+    pub wins: i32,
+    pub losses: i32,
+    pub opponent: String,
+}
+
+/// The title takes four wins in the Finals.
+const FINALS_WINS: i32 = 4;
+
+/// The most recent playoffs whose "NBA Finals" games the team won.
+fn champion(seasons: &[SeasonReport]) -> Option<Champion> {
+    seasons
+        .iter()
+        .filter(|s| s.season.season_type == 3)
+        .find_map(|playoffs| {
+            let finals: Vec<&Game> = playoffs
+                .season
+                .games
+                .iter()
+                .copied()
+                .filter(|g| {
+                    g.note
+                        .as_deref()
+                        .and_then(|n| n.get(.."NBA Finals".len()))
+                        .is_some_and(|start| start.eq_ignore_ascii_case("NBA Finals"))
+                })
+                .collect();
+            let wins = count(&finals, |g| won(g));
+            let losses = finals.len() as i32 - wins;
+            (wins >= FINALS_WINS && wins > losses).then(|| Champion {
+                wins,
+                losses,
+                opponent: finals
+                    .last()
+                    .map_or_else(String::new, |g| g.opponent.name.clone()),
+            })
+        })
+}
+
 pub struct Report<'a> {
     pub game_count: i32,
     pub replayed_games: i32,
@@ -1156,6 +1277,7 @@ pub struct Report<'a> {
     pub last_regular: Option<usize>,
     pub latest_game: Option<&'a Game>,
     pub last_series: Option<LastSeries>,
+    pub champion: Option<Champion>,
     pub points: PeriodPoints<'a>,
 }
 
@@ -1254,6 +1376,7 @@ pub fn build_report(data: &Dataset) -> Report<'_> {
         });
 
     Report {
+        champion: champion(&seasons),
         game_count: data.games.len() as i32,
         replayed_games: replays.values().filter(|r| r.ok).count() as i32,
         seasons,
@@ -1268,6 +1391,74 @@ pub fn build_report(data: &Dataset) -> Report<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn rated(games: i32, offense: f64, defense: f64) -> Ratings {
+        Ratings {
+            games,
+            wins: 0,
+            losses: 0,
+            margin: 0.0,
+            offense,
+            defense,
+            net: offense - defense,
+            pace: 0.0,
+            scored: 0.0,
+            allowed: 0.0,
+        }
+    }
+
+    fn quarter(quarter: i32, margin: f64, last_margin: Option<f64>) -> QuarterRow {
+        QuarterRow {
+            quarter,
+            scored: 0.0,
+            allowed: 0.0,
+            margin,
+            ahead: 0,
+            behind: 0,
+            tied: 0,
+            last_margin,
+        }
+    }
+
+    #[test]
+    fn headline_takes_the_largest_change() {
+        let was = rated(82, 115.0, 112.0);
+        assert_eq!(
+            headline(&rated(10, 118.0, 113.0), None, &[]),
+            Headline::Games { games: 10 }
+        );
+        assert_eq!(
+            headline(&rated(10, 118.0, 113.0), Some(&was), &[]),
+            Headline::Offense { change: 3.0 }
+        );
+        assert_eq!(
+            headline(&rated(10, 116.0, 108.0), Some(&was), &[]),
+            Headline::Defense { change: -4.0 }
+        );
+        let quarters = [quarter(1, 0.5, Some(0.0)), quarter(3, -4.0, Some(2.5))];
+        assert_eq!(
+            headline(&rated(10, 118.0, 113.0), Some(&was), &quarters),
+            Headline::Quarter {
+                quarter: 3,
+                margin: -4.0,
+                was: 2.5
+            }
+        );
+        // One game is too few for a quarter to lead.
+        assert_eq!(
+            headline(&rated(1, 118.0, 113.0), Some(&was), &quarters),
+            Headline::Offense { change: 3.0 }
+        );
+        // Equal changes: offense comes before defense.
+        assert_eq!(
+            headline(&rated(10, 117.0, 114.0), Some(&was), &[]),
+            Headline::Offense { change: 2.0 }
+        );
+        assert_eq!(
+            headline(&rated(10, 115.5, 112.5), Some(&was), &[]),
+            Headline::Net { net: 3.0, was: 3.0 }
+        );
+    }
 
     #[test]
     fn round_names() {

@@ -7,10 +7,10 @@ use ts_rs::TS;
 
 use crate::report::compute::PAIR_MIN_SECONDS;
 use crate::report::compute::{
-    Factors, GamePlayer, GameSide, LastSeries, PeriodPoints, PlayerReport, PlayerRow, QuarterRow,
-    Ratings, Report as Computed, Rolling, SeasonReport, ShotMap, Situation, build_report, factors,
-    flow, game_players, game_sides, points_by_period, quarters, ratings, rolling_margins, shot_map,
-    situations, won,
+    Champion, Factors, GamePlayer, GameSide, Headline, LastSeries, PeriodPoints, PlayerReport,
+    PlayerRow, QuarterRow, Ratings, Report as Computed, Rolling, SeasonReport, ShotMap, Situation,
+    build_report, factors, flow, game_players, game_sides, headline, points_by_period, quarters,
+    ratings, rolling_margins, shot_map, situations, won,
 };
 use crate::report::dates::new_york;
 use crate::report::lineups::{GameMoment, REPLAY_TOLERANCE, replay_game};
@@ -34,7 +34,10 @@ pub struct Report {
     pub current_key: Option<String>,
     pub last_regular_key: Option<String>,
     pub latest_game: Option<LatestGame>,
+    /// Null without a current season.
+    pub headline: Option<Headline>,
     pub last_series: Option<LastSeries>,
+    pub champion: Option<Champion>,
     /// Current season against last regular season; null without a current season.
     pub quarters: Option<Vec<QuarterRow>>,
     /// Null unless both seasons exist.
@@ -322,6 +325,7 @@ fn report(data: &Dataset) -> Result<(Report, Vec<PlayerDetail>, Vec<ShotMap>)> {
         last_regular,
         latest_game,
         last_series,
+        champion,
         points,
     } = build_report(data);
     let players = player_details(&seasons, &points);
@@ -334,6 +338,13 @@ fn report(data: &Dataset) -> Result<(Report, Vec<PlayerDetail>, Vec<ShotMap>)> {
     let tz = new_york()?;
 
     let quarters = now.map(|now| quarters(now, was));
+    let headline = current.map(|i| {
+        headline(
+            &seasons[i].season.ratings,
+            last_regular.map(|i| &seasons[i].season.ratings),
+            quarters.as_deref().unwrap_or_default(),
+        )
+    });
     let factors = now.zip(was).map(|(now, was)| factors(now, was));
     let situations = now.map(|now| situations(now, was, &tz)).transpose()?;
     let current_key = current.map(|i| seasons[i].season.key.clone());
@@ -364,7 +375,9 @@ fn report(data: &Dataset) -> Result<(Report, Vec<PlayerDetail>, Vec<ShotMap>)> {
         current_key,
         last_regular_key,
         latest_game,
+        headline,
         last_series,
+        champion,
         quarters,
         factors,
         situations,

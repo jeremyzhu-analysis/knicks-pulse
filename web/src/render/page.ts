@@ -1,5 +1,6 @@
 import type { Factor } from "../api/Factor.ts";
 import type { Game } from "../api/Game.ts";
+import type { Headline } from "../api/Headline.ts";
 import type { LatestGame } from "../api/LatestGame.ts";
 import type { PlayerRow } from "../api/PlayerRow.ts";
 import type { Report } from "../api/Report.ts";
@@ -47,24 +48,36 @@ export function table(head: string[], rows: string[][], className = ""): string 
 
 // ---------------------------------------------------------------- sections
 
+function headlineText(headline: Headline | null): string {
+  switch (headline?.kind) {
+    case "offense":
+      return `Offense ${Math.abs(headline.change).toFixed(1)} points ${headline.change < 0 ? "behind" : "ahead"}`;
+    case "defense":
+      return `Defense ${Math.abs(headline.change).toFixed(1)} points ${headline.change < 0 ? "better" : "worse"}`;
+    case "quarter":
+      return `Q${headline.quarter} ${signed(headline.margin)}, was ${signed(headline.was)}`;
+    case "net":
+      return `Net ${signed(headline.net)}, was ${signed(headline.was)}`;
+    case "games":
+      return `${headline.games} game${headline.games === 1 ? "" : "s"} played`;
+    default:
+      return "";
+  }
+}
+
 function hero(report: PageData): string {
   const now = report.current;
   if (!now) return `<section><h1>No games stored yet</h1><p class="note">Run <code>cargo run -- sync</code> to load games from ESPN.</p></section>`;
   const r = now.ratings;
   const last = report.lastRegular?.ratings ?? null;
 
-  let headline = `${r.games} games played`;
-  if (last) {
-    const off = r.offense - last.offense;
-    const def = r.defense - last.defense;
-    headline =
-      Math.abs(off) >= Math.abs(def)
-        ? `Offense ${Math.abs(off).toFixed(1)} points ${off < 0 ? "behind" : "ahead"}`
-        : `Defense ${Math.abs(def).toFixed(1)} points ${def < 0 ? "better" : "worse"}`;
-  }
+  const headline = headlineText(report.headline);
   const notes = [`${r.games} game${r.games === 1 ? "" : "s"}.`];
   if (r.games < SMALL_SAMPLE) notes.push("One night still moves the rate.");
-  if (report.lastSeries) {
+  if (report.champion) {
+    const c = report.champion;
+    notes.push(`Finals ${record(c.wins, c.losses)} vs ${e(c.opponent)}.`);
+  } else if (report.lastSeries) {
     const s = report.lastSeries;
     notes.push(`${e(s.round)} ${record(s.wins, s.losses)}, ${e(s.opponent)}.`);
   }
@@ -150,11 +163,14 @@ function seasonCards(report: PageData): string {
   const now = report.current?.ratings;
   const last = report.lastRegular?.ratings;
   const lede = now ? `Net ${signed(now.net)}.${last ? ` Last year ${signed(last.net)}.` : ""}` : "";
+  // This season, the one it's compared with, then the rest, most recent first.
+  const compared = [report.current, report.lastRegular].filter((s) => s !== null);
+  const ordered = [...compared, ...report.seasons.filter((s) => !compared.includes(s))];
   return `<section>
   <p class="kicker">Team / Season</p>
   <h2>Last year against this year</h2>
   <p>${lede}</p>
-  <div class="cards">${report.seasons.map(card).join("")}</div>
+  <div class="cards">${ordered.map(card).join("")}</div>
 </section>`;
 }
 

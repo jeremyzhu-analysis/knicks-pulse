@@ -113,6 +113,12 @@ Other free sources checked:
   `OREB / (OREB + opponent DREB)`, free-throw rate `FTA / FGA`.
 - The margin chart's running average covers the last 5 or 10 games of the
   season (fewer early on) and starts at the third game.
+- The headline is whichever moved most since last regular season: offense or
+  defense per 100 possessions, or a quarter's average margin (from the second
+  game on). When nothing moved by a full point it compares net ratings.
+- A season counts as a title when the team won at least four of its
+  "NBA Finals" games; the hero then shows that series, otherwise the last
+  playoff series.
 - Rest days count calendar days in New York between games.
 - Home and Road leave out games at a neutral site.
 - On/off and pairings replay the play-by-play to know who was on the floor.
