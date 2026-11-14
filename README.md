@@ -41,7 +41,7 @@ rustup toolchain install              # the version in rust-toolchain.toml
 nvm use                               # Node 26.13.1, for Vite
 npm install
 cp .env.example .env                  # already points at the container
-cargo run -- migrate                  # creates the tables
+cargo run -- migrate                  # creates the tables; adds new columns to existing ones
 cargo run -- sync                     # loads games from ESPN (first run: ~110 requests)
 npm run build                         # builds the page into web/dist
 cargo run --release -- serve          # http://localhost:3000
@@ -60,8 +60,11 @@ and use the `https://<machine>.<tailnet>.ts.net` address it prints;
 `tailscale serve reset` stops it.
 
 The server syncs once at startup and then every `SYNC_INTERVAL_MINUTES`
-(default 60, `0` means only at startup). Stored games are final and never
-fetched again, so a sync only fetches games that finished since the last one.
+(default 60, `0` means only at startup). A sync fetches the games that
+aren't stored yet, and the stored ones written in an older format: each game
+records the `STORE_FORMAT` (`src/sync.rs`) it was stored with, so after an
+update that stores more per game, run `cargo run -- migrate` and the next sync
+fetches every game once more.
 A game whose ESPN summary answers 404 is skipped and asked for again on every
 sync. The report and game JSON are computed once and kept until a sync stores new games.
 
@@ -73,7 +76,7 @@ notice. The design's footer names it as its source, and its numbers match.
 | Endpoint | Used for |
 | --- | --- |
 | `site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/ny/schedule?season=YYYY&seasontype=2\|3` | Completed game ids per season (2 regular season, 3 playoffs). Without `season` it returns the current one. |
-| `site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=ID` | Score by quarter, team and player box scores, play-by-play with substitutions. |
+| `site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=ID` | Score by quarter, team and player box scores, play-by-play with substitutions and shot positions, attendance, neutral site. |
 
 The sync stores the current and previous season, regular season and playoffs.
 

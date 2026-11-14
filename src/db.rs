@@ -4,6 +4,33 @@ use sqlx::mysql::{MySqlConnectOptions, MySqlConnection, MySqlPool, MySqlPoolOpti
 
 const SCHEMA: &str = include_str!("../db/schema.sql");
 
+/// Columns that databases created from an earlier schema.sql may lack:
+/// (table, column, definition). CREATE TABLE IF NOT EXISTS leaves an existing
+/// table alone, so `migrate` adds these itself. Each must also be in
+/// schema.sql, written as "column definition".
+const ADDED_COLUMNS: &[(&str, &str, &str)] = &[
+    ("games", "neutral", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ("games", "attendance", "INT UNSIGNED NULL"),
+    (
+        "games",
+        "store_format",
+        "TINYINT UNSIGNED NOT NULL DEFAULT 1",
+    ),
+    ("plays", "shooting", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    (
+        "plays",
+        "score_value",
+        "TINYINT UNSIGNED NOT NULL DEFAULT 0",
+    ),
+    (
+        "plays",
+        "points_attempted",
+        "TINYINT UNSIGNED NOT NULL DEFAULT 0",
+    ),
+    ("plays", "x", "SMALLINT NULL"),
+    ("plays", "y", "SMALLINT NULL"),
+];
+
 /// Sessions run in UTC, so DATETIME values are read and written as UTC.
 pub async fn pool(database_url: &str) -> Result<MySqlPool> {
     let options: MySqlConnectOptions = database_url.parse().context("parsing DATABASE_URL")?;
@@ -15,7 +42,8 @@ pub async fn pool(database_url: &str) -> Result<MySqlPool> {
         .context("connecting to MySQL")
 }
 
-/// Creates the database named in the URL if needed, then the tables.
+/// Creates the database named in the URL if needed, then the tables, then any
+/// column of ADDED_COLUMNS an existing table lacks.
 pub async fn migrate(database_url: &str) -> Result<()> {
     let (server_url, database) = split_database(database_url)?;
     let mut admin = MySqlConnection::connect(&server_url)
@@ -31,6 +59,27 @@ pub async fn migrate(database_url: &str) -> Result<()> {
         .execute(&mut admin)
         .await
         .context("creating tables")?;
+    for (table, column, definition) in ADDED_COLUMNS {
+        let present: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM information_schema.columns
+             WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?",
+        )
+        .bind(table)
+        .bind(column)
+        .fetch_one(&mut admin)
+        .await?;
+        if present == 0 {
+            let add = format!(
+                "ALTER TABLE {} ADD COLUMN {} {definition}",
+                escape_id(table),
+                escape_id(column)
+            );
+            sqlx::raw_sql(sqlx::AssertSqlSafe(add))
+                .execute(&mut admin)
+                .await
+                .with_context(|| format!("adding {table}.{column}"))?;
+        }
+    }
     admin.close().await?;
     Ok(())
 }
@@ -100,6 +149,16 @@ mod tests {
         );
         assert!(split_database("mysql://u@h").is_err());
         assert!(split_database("mysql://u@h/").is_err());
+    }
+
+    #[test]
+    fn added_columns_are_in_the_schema() {
+        for (table, column, definition) in ADDED_COLUMNS {
+            assert!(
+                SCHEMA.contains(&format!("  {column} {definition},\n")),
+                "{table}.{column} differs from schema.sql"
+            );
+        }
     }
 
     #[test]

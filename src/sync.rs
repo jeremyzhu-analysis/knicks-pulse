@@ -8,15 +8,18 @@ use crate::config::TEAM_SLUG;
 use crate::espn::{Espn, EspnHttpError, GameSummary, PLAYOFFS, REGULAR_SEASON};
 use crate::report::dates::new_york;
 
+/// Version of what `store_game` writes for a game. Raise it when a stored game
+/// gains data that only ESPN can supply.
+const STORE_FORMAT: u8 = 2;
+
 pub struct SyncResult {
     pub completed: usize,
     pub added: usize,
 }
 
 /// Stores every completed game of the current and previous season (regular
-/// season and playoffs) that isn't in the database yet. Finished games don't
-/// change, so a stored game is never fetched again. Callers must not run two
-/// syncs at once.
+/// season and playoffs) that isn't in the database in the current
+/// STORE_FORMAT. Callers must not run two syncs at once.
 pub async fn sync_games(pool: &MySqlPool, espn: &Espn, log: impl Fn(&str)) -> Result<SyncResult> {
     let current = espn.schedule(TEAM_SLUG, None, REGULAR_SEASON).await?;
     let year = current.season_year;
@@ -34,12 +37,14 @@ pub async fn sync_games(pool: &MySqlPool, espn: &Espn, log: impl Fn(&str)) -> Re
         .filter(|id| seen.insert(id.clone()))
         .collect();
 
-    let stored: HashSet<String> = sqlx::query_scalar::<_, u64>("SELECT id FROM games")
-        .fetch_all(pool)
-        .await?
-        .into_iter()
-        .map(|id| id.to_string())
-        .collect();
+    let stored: HashSet<String> =
+        sqlx::query_scalar::<_, u64>("SELECT id FROM games WHERE store_format = ?")
+            .bind(STORE_FORMAT)
+            .fetch_all(pool)
+            .await?
+            .into_iter()
+            .map(|id| id.to_string())
+            .collect();
     let missing: Vec<&String> = ids.iter().filter(|id| !stored.contains(*id)).collect();
     log(&format!(
         "{} completed games, {} to fetch.",
@@ -126,8 +131,8 @@ async fn store_game(pool: &MySqlPool, game: &GameSummary) -> Result<()> {
         .unwrap_or(0)
         .max(4);
     sqlx::query(
-        "INSERT INTO games (id, season_year, season_type, starts_at, home_team_id, away_team_id, home_score, away_score, periods, venue, note, synced_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())",
+        "INSERT INTO games (id, season_year, season_type, starts_at, home_team_id, away_team_id, home_score, away_score, periods, venue, note, synced_at, neutral, attendance, store_format)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), ?, ?, ?)",
     )
     .bind(game_id)
     .bind(game.season_year)
@@ -140,6 +145,9 @@ async fn store_game(pool: &MySqlPool, game: &GameSummary) -> Result<()> {
     .bind(period_count)
     .bind(&game.venue)
     .bind(&game.note)
+    .bind(game.neutral)
+    .bind(game.attendance)
+    .bind(STORE_FORMAT)
     .execute(&mut *tx)
     .await?;
 
@@ -183,12 +191,14 @@ async fn store_game(pool: &MySqlPool, game: &GameSummary) -> Result<()> {
     let plays: Vec<_> = game.plays.iter().enumerate().collect();
     insert(
         &mut tx,
-        "plays (game_id, ord, period, clock_s, type_text, team_id, home_score, away_score, text, player1_id, player2_id, player3_id)",
+        "plays (game_id, ord, period, clock_s, type_text, team_id, home_score, away_score, text, player1_id, player2_id, player3_id, shooting, score_value, points_attempted, x, y)",
         &plays,
         |mut row, (i, p)| {
             row.push_bind(game_id).push_bind(*i as i64).push_bind(p.period).push_bind(p.clock_seconds);
             row.push_bind(&p.type_text).push_bind(p.team_id).push_bind(p.home_score).push_bind(p.away_score);
             row.push_bind(&p.text).push_bind(p.players[0]).push_bind(p.players[1]).push_bind(p.players[2]);
+            row.push_bind(p.shooting).push_bind(p.score_value).push_bind(p.points_attempted);
+            row.push_bind(p.position.map(|c| c.0)).push_bind(p.position.map(|c| c.1));
         },
     )
     .await?;

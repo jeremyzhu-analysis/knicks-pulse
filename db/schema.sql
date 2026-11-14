@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS players (
 
 -- season_year is ESPN's: the year the season ends (2027 = 2026-27).
 -- season_type is ESPN's: 2 regular season, 3 playoffs.
+-- store_format is the STORE_FORMAT of the sync that wrote the game; a sync
+-- fetches again every game below its own.
 CREATE TABLE IF NOT EXISTS games (
   id BIGINT UNSIGNED PRIMARY KEY,
   season_year SMALLINT UNSIGNED NOT NULL,
@@ -28,6 +30,9 @@ CREATE TABLE IF NOT EXISTS games (
   venue VARCHAR(128) NULL,
   note VARCHAR(128) NULL,
   synced_at DATETIME NOT NULL,
+  neutral BOOLEAN NOT NULL DEFAULT FALSE,
+  attendance INT UNSIGNED NULL,
+  store_format TINYINT UNSIGNED NOT NULL DEFAULT 1,
   INDEX games_season (season_year, season_type),
   FOREIGN KEY (home_team_id) REFERENCES teams (id),
   FOREIGN KEY (away_team_id) REFERENCES teams (id)
@@ -96,6 +101,9 @@ CREATE TABLE IF NOT EXISTS game_players (
 
 -- Play-by-play in ESPN's order (ord). clock_s is seconds left in the period.
 -- For substitutions player1 enters and player2 leaves.
+-- shooting marks shots, free throws included; points_attempted is 2 or 3 on a
+-- field-goal attempt and score_value is the points the play scored. x and y
+-- are ESPN's court position, NULL where ESPN gives none.
 CREATE TABLE IF NOT EXISTS plays (
   game_id BIGINT UNSIGNED NOT NULL,
   ord SMALLINT UNSIGNED NOT NULL,
@@ -109,6 +117,11 @@ CREATE TABLE IF NOT EXISTS plays (
   player1_id INT UNSIGNED NULL,
   player2_id INT UNSIGNED NULL,
   player3_id INT UNSIGNED NULL,
+  shooting BOOLEAN NOT NULL DEFAULT FALSE,
+  score_value TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  points_attempted TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  x SMALLINT NULL,
+  y SMALLINT NULL,
   PRIMARY KEY (game_id, ord),
   FOREIGN KEY (game_id) REFERENCES games (id) ON DELETE CASCADE
 );

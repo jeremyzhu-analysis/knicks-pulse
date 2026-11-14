@@ -191,6 +191,14 @@ pub struct Play {
     pub away_score: i64,
     pub text: String,
     pub players: [Option<i64>; 3],
+    /// A shot, free throws included.
+    pub shooting: bool,
+    /// Points the play scored.
+    pub score_value: i64,
+    /// 2 or 3 on a field-goal attempt.
+    pub points_attempted: i64,
+    /// ESPN's court position; None where ESPN gives none.
+    pub position: Option<(i16, i16)>,
 }
 
 pub struct Period {
@@ -212,6 +220,8 @@ pub struct GameSummary {
     pub periods: Vec<Period>,
     pub venue: Option<String>,
     pub note: Option<String>,
+    pub neutral: bool,
+    pub attendance: Option<i64>,
     pub team_boxes: Vec<TeamBox>,
     pub player_boxes: Vec<PlayerBox>,
     pub plays: Vec<Play>,
@@ -377,10 +387,15 @@ fn parse_summary(game_id: &str, json: SummaryJson) -> Result<GameSummary> {
                 away_score: p.away_score,
                 text: truncate(p.text.as_deref().unwrap_or(""), 255),
                 players: [participant(0), participant(1), participant(2)],
+                shooting: p.shooting_play.unwrap_or(false),
+                score_value: p.score_value.unwrap_or(0),
+                points_attempted: p.points_attempted.unwrap_or(0),
+                position: p.coordinate.and_then(|c| court_position(c.x, c.y)),
             }
         })
         .collect();
 
+    let attendance = json.game_info.as_ref().and_then(|g| g.attendance);
     Ok(GameSummary {
         id: game_id.to_string(),
         completed: competition.status.r#type.completed,
@@ -397,10 +412,19 @@ fn parse_summary(game_id: &str, json: SummaryJson) -> Result<GameSummary> {
             .and_then(|g| g.venue)
             .and_then(|v| v.full_name),
         note: json.header.game_note,
+        neutral: competition.neutral_site.unwrap_or(false),
+        attendance: attendance.filter(|&a| a > 0),
         team_boxes,
         player_boxes,
         plays,
     })
+}
+
+/// ESPN puts a huge negative number in both coordinates of a play that has no
+/// place on the court (free throws, timeouts); real ones fit well within ±200.
+pub(crate) fn court_position(x: Option<f64>, y: Option<f64>) -> Option<(i16, i16)> {
+    let on_court = |v: f64| (v.abs() <= 200.0).then_some(v.round() as i16);
+    Some((on_court(x?)?, on_court(y?)?))
 }
 
 /// ESPN's dates often have no seconds: "2026-11-03T00:30Z".
@@ -519,8 +543,10 @@ struct SeasonJson {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CompetitionJson {
     date: String,
+    neutral_site: Option<bool>,
     status: StatusJson,
     competitors: Vec<CompetitorJson>,
 }
@@ -563,6 +589,7 @@ struct TeamJson {
 #[derive(Deserialize)]
 struct GameInfoJson {
     venue: Option<VenueJson>,
+    attendance: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -640,6 +667,16 @@ struct PlayJson {
     home_score: i64,
     away_score: i64,
     participants: Option<Vec<ParticipantJson>>,
+    shooting_play: Option<bool>,
+    score_value: Option<i64>,
+    points_attempted: Option<i64>,
+    coordinate: Option<CoordinateJson>,
+}
+
+#[derive(Deserialize)]
+struct CoordinateJson {
+    x: Option<f64>,
+    y: Option<f64>,
 }
 
 #[derive(Deserialize)]
@@ -713,13 +750,23 @@ mod tests {
     fn skips_players_who_did_not_play_even_without_a_name() {
         let json = r#"{
           "header": {"season": {"year": 2026, "type": 2}, "gameNote": null, "competitions": [{
-            "date": "2026-02-22T20:30Z", "status": {"type": {"completed": true}},
+            "date": "2026-02-22T20:30Z", "neutralSite": true, "status": {"type": {"completed": true}},
             "competitors": [
               {"id": "18", "homeAway": "home", "score": "108", "linescores": [{"displayValue": "30"}],
                "team": {"id": "18", "abbreviation": "NY", "displayName": "New York Knicks", "name": "Knicks"}},
               {"id": "10", "homeAway": "away", "score": "106",
                "team": {"id": "10", "abbreviation": "HOU", "displayName": "Houston Rockets", "name": "Rockets"}}
             ]}]},
+          "gameInfo": {"attendance": 19812},
+          "plays": [
+            {"type": {"text": "Jump Shot"}, "text": "Jalen Brunson makes 25-foot three point jumper", "period": {"number": 1},
+             "clock": {"displayValue": "11:24"}, "team": {"id": "18"}, "homeScore": 3, "awayScore": 0,
+             "participants": [{"athlete": {"id": "1"}}],
+             "shootingPlay": true, "scoreValue": 3, "pointsAttempted": 3, "coordinate": {"x": 44, "y": 12}},
+            {"type": {"text": "Free Throw - 1 of 2"}, "period": {"number": 1},
+             "clock": {"displayValue": "10:02"}, "team": {"id": "18"}, "homeScore": 4, "awayScore": 0,
+             "shootingPlay": true, "scoreValue": 1, "coordinate": {"x": -214748340, "y": -214748365}}
+          ],
           "boxscore": {
             "teams": [{"team": {"id": "18"}, "statistics": [{"name": "fieldGoalsMade-fieldGoalsAttempted", "displayValue": "40-85"}]}],
             "players": [{"team": {"id": "18"}, "statistics": [{"names": ["MIN", "PTS", "FG", "+/-"], "athletes": [
@@ -746,6 +793,26 @@ mod tests {
         );
         assert_eq!((game.team_boxes[0].pts, game.team_boxes[0].fga), (108, 85));
         assert_eq!(game.periods.len(), 1);
-        assert!(game.plays.is_empty() && game.venue.is_none() && game.note.is_none());
+        assert!(game.venue.is_none() && game.note.is_none());
+        assert_eq!((game.neutral, game.attendance), (true, Some(19812)));
+        let shot = &game.plays[0];
+        assert_eq!(
+            (
+                shot.shooting,
+                shot.score_value,
+                shot.points_attempted,
+                shot.position
+            ),
+            (true, 3, 3, Some((44, 12)))
+        );
+        let free_throw = &game.plays[1];
+        assert_eq!(
+            (
+                free_throw.shooting,
+                free_throw.points_attempted,
+                free_throw.position
+            ),
+            (true, 0, None)
+        );
     }
 }
