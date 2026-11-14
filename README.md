@@ -9,7 +9,8 @@ renders it in the browser.
 
 - Rust, version pinned in `rust-toolchain.toml`. One binary, `knicks`, with
   three commands: `serve`, `migrate` and `sync`. Axum serves `/api/report`,
-  `/api/games/{id}` and the built page, sqlx talks to MySQL, and reqwest fetches ESPN.
+  `/api/games/{id}`, `/api/sync` and the built page, sqlx talks to MySQL, and
+  reqwest fetches ESPN.
   The ESPN client trusts Mozilla's root certificates compiled into the
   binary (`webpki-root-certs`), not the macOS keychain.
 - The page is plain TypeScript built with Vite (`web/`). It fetches
@@ -60,7 +61,10 @@ and use the `https://<machine>.<tailnet>.ts.net` address it prints;
 `tailscale serve reset` stops it.
 
 The server syncs once at startup and then every `SYNC_INTERVAL_MINUTES`
-(default 60, `0` means only at startup). A sync fetches the games that
+(default 60, `0` means only at startup). The page also asks for a sync each
+time it loads and from the header's "Check for new games" button
+(`POST /api/sync`; `GET /api/sync` tells when the last one finished). Syncs
+never overlap: a request made while one runs starts none. A sync fetches the games that
 aren't stored yet, and the stored ones written in an older format: each game
 records the `STORE_FORMAT` (`src/sync.rs`) it was stored with, so after an
 update that stores more per game, run `cargo run -- migrate` and the next sync

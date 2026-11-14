@@ -9,6 +9,7 @@ import { heat, marginChart, quarterChart } from "./charts.ts";
 import { knicksMark, liberty } from "./brand.ts";
 import { hosted, margin, site, won } from "./game.ts";
 import { impactLabel, impactTitle } from "./impact.ts";
+import { syncControl } from "../sync.ts";
 
 const TEAM = "Knicks";
 const SMALL_SAMPLE = 20;
@@ -101,9 +102,9 @@ export function gameWhere(game: Game): string {
     .join(" · ");
 }
 
-export function pageHeader(note: string): string {
+export function pageHeader(): string {
   return `<header>
-  <div class="brand">${knicksMark}<div><p class="kicker">New York Knicks</p><strong>Game to game</strong><p class="note">${note}</p></div></div>
+  <div class="brand">${knicksMark}<div><p class="kicker">New York Knicks</p><strong>Game to game</strong><p class="note">${syncControl()}</p></div></div>
   ${liberty}
 </header>`;
 }
@@ -312,7 +313,7 @@ export function renderBody(api: Report): string {
   const season = (key: string | null) => api.seasons.find((s) => s.key === key) ?? null;
   const report: PageData = { ...api, current: season(api.currentKey), lastRegular: season(api.lastRegularKey) };
   const updated = report.syncedAt ? `Updated ${dateTime(report.syncedAt)}` : "No data yet";
-  return `${pageHeader(updated)}
+  return `${pageHeader()}
 <main>
 <nav>
   <a href="#season">Season</a><a href="#games">Game to game</a><a href="#quarters">Quarters</a>

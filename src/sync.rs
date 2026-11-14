@@ -152,6 +152,15 @@ pub async fn sync_games(pool: &MySqlPool, espn: &Espn, log: impl Fn(&str)) -> Re
     })
 }
 
+/// When a sync last ran to the end, ISO 8601 in UTC.
+pub async fn checked_at(pool: &MySqlPool) -> Result<Option<String>> {
+    Ok(sqlx::query_scalar(
+        "SELECT DATE_FORMAT(checked_at, '%Y-%m-%dT%H:%i:%sZ') FROM sync_status WHERE id = 1",
+    )
+    .fetch_optional(pool)
+    .await?)
+}
+
 /// A completed game as a schedule lists it.
 struct Listed {
     id: String,

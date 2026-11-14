@@ -1,4 +1,4 @@
-//! The JSON the page reads from `/api/report` and `/api/games/{id}`. ts-rs writes matching
+//! The JSON the page reads from the `/api` routes. ts-rs writes matching
 //! TypeScript types to web/src/api when `cargo test` runs.
 
 use anyhow::Result;
@@ -38,6 +38,29 @@ pub struct Report {
     /// Null unless both seasons exist.
     pub factors: Option<Factors>,
     pub situations: Option<Vec<Situation>>,
+}
+
+/// `GET /api/sync`.
+#[derive(Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SyncStatus {
+    /// When a sync last ran to the end, ISO 8601 in UTC; null before the first.
+    pub checked_at: Option<String>,
+}
+
+/// `POST /api/sync`.
+#[derive(Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SyncOutcome {
+    /// True when another sync was running, so this request started none.
+    pub busy: bool,
+    /// Games stored for the first time.
+    pub added: i32,
+    /// Games that were stored before and written again.
+    pub updated: i32,
+    pub checked_at: Option<String>,
 }
 
 #[derive(Serialize, TS)]

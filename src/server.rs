@@ -7,7 +7,7 @@ use axum::Router;
 use axum::body::Bytes;
 use axum::extract::{Path, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
-use axum::http::{HeaderValue, Response, StatusCode};
+use axum::http::{HeaderMap, HeaderValue, Response, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::get;
 use sqlx::mysql::MySqlPool;
@@ -36,6 +36,9 @@ struct AppState {
     /// and kept until then. The lock also makes concurrent first requests wait
     /// for one build instead of starting their own.
     built: Mutex<Option<Arc<Built>>>,
+    espn: Espn,
+    /// Held for the length of a sync, so two never run at once.
+    syncing: Mutex<()>,
 }
 
 impl AppState {
@@ -59,6 +62,18 @@ impl AppState {
     }
 }
 
+impl AppState {
+    /// The caller holds `syncing`.
+    async fn sync(&self) -> Result<sync::SyncResult> {
+        let result =
+            sync::sync_games(&self.pool, &self.espn, |line| println!("[sync] {line}")).await?;
+        if result.added + result.updated > 0 {
+            *self.built.lock().await = None;
+        }
+        Ok(result)
+    }
+}
+
 fn json_response(json: Bytes) -> axum::response::Response {
     (
         [
@@ -68,6 +83,13 @@ fn json_response(json: Bytes) -> axum::response::Response {
         json,
     )
         .into_response()
+}
+
+fn serialized(value: &impl serde::Serialize) -> axum::response::Response {
+    match serde_json::to_vec(value) {
+        Ok(json) => json_response(Bytes::from(json)),
+        Err(error) => server_error(error.into()),
+    }
 }
 
 fn server_error(error: anyhow::Error) -> axum::response::Response {
@@ -95,6 +117,43 @@ async fn game_detail(
     }
 }
 
+async fn sync_status(State(state): State<Arc<AppState>>) -> axum::response::Response {
+    match sync::checked_at(&state.pool).await {
+        Ok(checked_at) => serialized(&api::SyncStatus { checked_at }),
+        Err(error) => server_error(error),
+    }
+}
+
+/// Starts a sync unless one is running. Browsers say where a request comes
+/// from; one sent by another site's page is refused.
+async fn sync_now(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    if headers
+        .get("sec-fetch-site")
+        .is_some_and(|site| site != "same-origin")
+    {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+    let outcome = async {
+        let result = match state.syncing.try_lock() {
+            Ok(_running) => Some(state.sync().await?),
+            Err(_) => None,
+        };
+        anyhow::Ok(api::SyncOutcome {
+            busy: result.is_none(),
+            added: result.as_ref().map_or(0, |r| r.added as i32),
+            updated: result.as_ref().map_or(0, |r| r.updated as i32),
+            checked_at: sync::checked_at(&state.pool).await?,
+        })
+    };
+    match outcome.await {
+        Ok(outcome) => serialized(&outcome),
+        Err(error) => server_error(error),
+    }
+}
+
 /// Only successful responses get a cache header; errors stay uncached.
 fn cache_on_success<B>(
     value: &'static str,
@@ -114,6 +173,7 @@ fn app(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/api/report", get(report))
         .route("/api/games/{id}", get(game_detail))
+        .route("/api/sync", get(sync_status).post(sync_now))
         .with_state(state)
         .nest_service(
             "/assets",
@@ -130,13 +190,9 @@ fn app(state: Arc<AppState>) -> Router {
         ))
 }
 
-/// Syncs once at startup, then every `minutes` (0 = only once). Runs inline,
-/// so two syncs never overlap; a tick missed during a long sync is skipped.
+/// Syncs once at startup, then every `minutes` (0 = only once). A tick missed
+/// during a long sync is skipped.
 async fn sync_loop(state: Arc<AppState>, minutes: u64) {
-    let espn = match Espn::new() {
-        Ok(espn) => espn,
-        Err(error) => return eprintln!("[sync] failed: {error:#}"),
-    };
     let mut ticks = (minutes > 0).then(|| {
         let mut interval = tokio::time::interval(Duration::from_secs(minutes * 60));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -146,11 +202,11 @@ async fn sync_loop(state: Arc<AppState>, minutes: u64) {
         if let Some(ticks) = ticks.as_mut() {
             ticks.tick().await;
         }
-        match sync::sync_games(&state.pool, &espn, |line| println!("[sync] {line}")).await {
-            Ok(result) if result.added + result.updated > 0 => *state.built.lock().await = None,
-            Ok(_) => {}
-            Err(error) => eprintln!("[sync] failed: {error:#}"),
+        let _running = state.syncing.lock().await;
+        if let Err(error) = state.sync().await {
+            eprintln!("[sync] failed: {error:#}");
         }
+        drop(_running);
         if ticks.is_none() {
             return;
         }
@@ -178,6 +234,8 @@ pub async fn serve(config: &Config, pool: MySqlPool) -> Result<()> {
     let state = Arc::new(AppState {
         pool,
         built: Mutex::new(None),
+        espn: Espn::new()?,
+        syncing: Mutex::new(()),
     });
     let listener = tokio::net::TcpListener::bind((config.host.as_str(), config.port))
         .await

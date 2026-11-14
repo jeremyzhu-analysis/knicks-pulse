@@ -3,6 +3,7 @@ import type { Report } from "./api/Report.ts";
 import type { GameDetail } from "./api/GameDetail.ts";
 import { renderGame, renderGameNotFound } from "./render/gamePage.ts";
 import { renderBody } from "./render/page.ts";
+import { startSync } from "./sync.ts";
 
 /** Season switch and the pairing readout. */
 function wire(): void {
@@ -57,4 +58,9 @@ async function show(): Promise<void> {
 }
 
 window.addEventListener("hashchange", () => void show());
-void show();
+void show().then(() =>
+  startSync(() => {
+    showing = null;
+    void show();
+  }),
+);

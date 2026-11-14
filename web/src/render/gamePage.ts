@@ -17,7 +17,7 @@ function stintLine({ from, to }: Stint): string {
 }
 
 const page = (body: string) =>
-  `${pageHeader("")}
+  `${pageHeader()}
 <main>
 <nav><a href="#games">← All games</a></nav>
 ${body}
