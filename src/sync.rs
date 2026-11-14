@@ -67,7 +67,8 @@ pub async fn sync_games(pool: &MySqlPool, espn: &Espn, log: impl Fn(&str)) -> Re
         .collect();
 
     // id -> whether the stored game can be left as it is.
-    let stored: HashMap<String, bool> = sqlx::query_as::<_, (u64, bool)>(
+    // MySQL types a comparison as a plain integer, so it's read as one.
+    let stored: HashMap<String, bool> = sqlx::query_as::<_, (u64, i64)>(
         "SELECT id, store_format = ? AND starts_at <= UTC_TIMESTAMP() - INTERVAL ? HOUR FROM games",
     )
     .bind(STORE_FORMAT)
@@ -75,7 +76,7 @@ pub async fn sync_games(pool: &MySqlPool, espn: &Espn, log: impl Fn(&str)) -> Re
     .fetch_all(pool)
     .await?
     .into_iter()
-    .map(|(id, settled)| (id.to_string(), settled))
+    .map(|(id, settled)| (id.to_string(), settled != 0))
     .collect();
     let to_fetch: Vec<&Listed> = listed
         .iter()
