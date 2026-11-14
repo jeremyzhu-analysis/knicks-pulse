@@ -1,7 +1,8 @@
 # Knicks game to game
 
-A report on the New York Knicks, built from the design in
-`design/index.html`. Game data comes from ESPN's public site API and is stored
+A report on the New York Knicks. It started from the design in
+`design/index.html`, a single long page; the report now shows its sections as
+tabs. Game data comes from ESPN's public site API and is stored
 in MySQL. A Rust server computes the report and serves it as JSON; the page
 renders it in the browser.
 
@@ -14,8 +15,10 @@ renders it in the browser.
   The ESPN client trusts Mozilla's root certificates compiled into the
   binary (`webpki-root-certs`), not the macOS keychain.
 - The page is plain TypeScript built with Vite (`web/`). It fetches
-  `/api/report` and writes the HTML; `#game/{id}` shows one game from
-  `/api/games/{id}`. The API's TypeScript types in
+  `/api/report` and writes the HTML one tab at a time, in two layers: Team
+  (`#team/season`, `games`, `quarters`, `factors`, `situations`) and Players
+  (`#players/impact`, `pairs`). `#game/{id}` shows one game from
+  `/api/games/{id}`. The routes are in `web/src/route.ts`. The API's TypeScript types in
   `web/src/api/` are generated from the Rust structs by ts-rs whenever
   `cargo test` runs; don't edit them by hand.
 - Node.js 26.13.1 (`.nvmrc`) runs Vite and TypeScript 7 (`npm run typecheck`).

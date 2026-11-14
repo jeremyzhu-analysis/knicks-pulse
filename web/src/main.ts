@@ -3,6 +3,7 @@ import type { Report } from "./api/Report.ts";
 import type { GameDetail } from "./api/GameDetail.ts";
 import { renderGame, renderGameNotFound } from "./render/gamePage.ts";
 import { renderBody } from "./render/page.ts";
+import { parseHash, type View } from "./route.ts";
 import { startSync } from "./sync.ts";
 
 /** Season switch and the pairing readout. */
@@ -22,34 +23,44 @@ function wire(): void {
   });
 }
 
-const gameInHash = () => /^#game\/([^/]+)$/.exec(location.hash)?.[1] ?? null;
+/** The API's JSON by URL, kept while the page is open; null for a 404. */
+const loaded = new Map<string, unknown>();
 
-/** Which view is on screen: a game id, "report", or null before the first render. */
-let showing: string | null = null;
+async function load<T>(url: string): Promise<T | null> {
+  if (!loaded.has(url)) {
+    const res = await fetch(url);
+    if (!res.ok && res.status !== 404) throw new Error(`${url} answered ${res.status}`);
+    loaded.set(url, res.ok ? await res.json() : null);
+  }
+  return loaded.get(url) as T | null;
+}
+
+async function html(view: View): Promise<string> {
+  if (view.page === "game") {
+    const game = await load<GameDetail>(`/api/games/${view.id}`);
+    return game ? renderGame(game) : renderGameNotFound();
+  }
+  const report = await load<Report>("/api/report");
+  if (!report) throw new Error("/api/report answered 404");
+  return renderBody(report, view);
+}
+
+/** The page on screen, to tell a change of tab from a change of page. */
+let showing: View["page"] | null = null;
 
 async function show(): Promise<void> {
   const hash = location.hash;
-  const id = gameInHash();
-  const wanted = id ?? "report";
-  // Moving between the report's own sections is the browser's normal scrolling.
-  if (wanted === showing) return;
+  const view = parseHash(hash);
   try {
-    const url = id ? `/api/games/${id}` : "/api/report";
-    const res = await fetch(url);
-    if (!res.ok && !(id && res.status === 404)) throw new Error(`${url} answered ${res.status}`);
-    const html = !id
-      ? renderBody((await res.json()) as Report)
-      : res.ok
-        ? renderGame((await res.json()) as GameDetail)
-        : renderGameNotFound();
+    const body = await html(view);
     // The reader may have moved on while this was loading.
     if (location.hash !== hash) return;
-    document.body.innerHTML = html;
-    showing = wanted;
+    // The tabs share the hero above them, so a change of tab keeps the scroll position.
+    const keepScroll = view.page === "report" && showing === "report";
+    document.body.innerHTML = body;
+    showing = view.page;
     wire();
-    const anchor = id ? null : document.getElementById(hash.slice(1));
-    if (anchor) anchor.scrollIntoView();
-    else window.scrollTo(0, 0);
+    if (!keepScroll) window.scrollTo(0, 0);
   } catch (error) {
     console.error(error);
     showing = null;
@@ -60,7 +71,7 @@ async function show(): Promise<void> {
 window.addEventListener("hashchange", () => void show());
 void show().then(() =>
   startSync(() => {
-    showing = null;
+    loaded.clear();
     void show();
   }),
 );

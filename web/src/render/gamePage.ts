@@ -2,7 +2,7 @@ import type { GameDetail } from "../api/GameDetail.ts";
 import type { GameMoment } from "../api/GameMoment.ts";
 import type { Stint } from "../api/Stint.ts";
 import { escapeHtml as e, percent, signed } from "../format.ts";
-import { gameWhere, pageHeader, scoreTable, table } from "./page.ts";
+import { gameWhere, layerNav, pageHeader, scoreTable, table } from "./page.ts";
 
 function when(m: GameMoment): string {
   const seconds = Math.floor(m.clockSeconds);
@@ -19,7 +19,7 @@ function stintLine({ from, to }: Stint): string {
 const page = (body: string) =>
   `${pageHeader()}
 <main>
-<nav><a href="#games">← All games</a></nav>
+${layerNav("team", "games")}
 ${body}
 </main>`;
 

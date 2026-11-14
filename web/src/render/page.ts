@@ -9,6 +9,7 @@ import { heat, marginChart, quarterChart } from "./charts.ts";
 import { knicksMark, liberty } from "./brand.ts";
 import { hosted, margin, site, won } from "./game.ts";
 import { impactLabel, impactTitle } from "./impact.ts";
+import { LAYERS, type ReportView } from "../route.ts";
 import { syncControl } from "../sync.ts";
 
 const TEAM = "Knicks";
@@ -109,6 +110,16 @@ export function pageHeader(): string {
 </header>`;
 }
 
+/** Both rows of navigation: the layers, then the tabs of the layer in view. */
+export function layerNav(layer: string, tab: string): string {
+  const current = LAYERS.find((l) => l.id === layer) ?? LAYERS[0];
+  const link = (href: string, label: string, on: boolean) => `<a href="#${href}"${on ? ` class="on"` : ""}>${label}</a>`;
+  return (
+    `<nav class="layers">${LAYERS.map((l) => link(`${l.id}/${l.tabs[0].id}`, l.label, l === current)).join("")}</nav>` +
+    `<nav>${current.tabs.map((t) => link(`${current.id}/${t.id}`, t.label, t.id === tab)).join("")}</nav>`
+  );
+}
+
 function latestGame(game: LatestGame | null): string {
   if (!game) return "";
   const quartersPlayed = game.usByPeriod.map((p, i) => p - (game.themByPeriod[i] ?? 0));
@@ -136,8 +147,8 @@ function seasonCards(report: PageData): string {
   const now = report.current?.ratings;
   const last = report.lastRegular?.ratings;
   const lede = now ? `Net ${signed(now.net)}.${last ? ` Last year ${signed(last.net)}.` : ""}` : "";
-  return `<section id="season">
-  <p class="kicker">01 / Season</p>
+  return `<section>
+  <p class="kicker">Team / Season</p>
   <h2>Last year against this year</h2>
   <p>${lede}</p>
   <div class="cards">${report.seasons.map(card).join("")}</div>
@@ -151,8 +162,8 @@ function gameLinks(games: Game[]): string {
 }
 
 function gamesSection(report: PageData): string {
-  return `<section id="games">
-  <p class="kicker">02 / Game to game</p>
+  return `${latestGame(report.latestGame)}<section>
+  <p class="kicker">Team / Games</p>
   <h2>The margin, one night at a time</h2>
   <p>Dot is the final margin. Line is the running average.</p>
   ${seasonPanels(report, (s) => `${marginChart(s.games)}<p class="note">Orange win. Blue loss. White line, 5-game average. Pick a game to see it player by player.</p>${gameLinks(s.games)}`)}
@@ -188,8 +199,8 @@ function quartersSection(report: PageData): string {
       }),
       "heat",
     );
-  return `<section id="quarters">
-  <p class="kicker">03 / Quarters</p>
+  return `<section>
+  <p class="kicker">Team / Quarters</p>
   <h2>Where the game is won or lost</h2>
   <p>Best Q${best.quarter} ${signed(best.margin)}. Softest Q${worst.quarter} ${signed(worst.margin)}.</p>
   ${quarterChart(rows)}
@@ -213,8 +224,8 @@ function factorsSection(report: PageData): string {
       `<div class="track"><i style="left:${d < 0 ? 50 - width : 50}%;width:${width}%;background:${color}"></i></div>` +
       `<b style="color:${color}">${signed(d)}</b></div>`;
   };
-  return `<section id="factors">
-  <p class="kicker">04 / Offense and defense</p>
+  return `<section>
+  <p class="kicker">Team / Offense and defense</p>
   <h2>Four factors, both ends</h2>
   <p>This season against last. Olive helps. Rose hurts.</p>
   <p class="kicker faint">Offense</p>${offense.map(row).join("")}<p class="kicker faint">Defense</p>${defense.map(row).join("")}
@@ -236,8 +247,8 @@ function situationsSection(report: PageData): string {
     const last = s.last ? `<p class="note">Last year ${signed(s.last.margin)}</p>` : "";
     return `<article class="card"><p class="kicker">${s.label}</p>${big}${detail}${last}</article>`;
   };
-  return `<section id="situations">
-  <p class="kicker">05 / Situations</p>
+  return `<section>
+  <p class="kicker">Team / Situations</p>
   <h2>Home, road, and the night after</h2>
   <p>${lede}</p>
   <div class="cards">${list.map(card).join("")}</div>
@@ -272,8 +283,8 @@ function pairsSection(report: PageData): string {
     const readout = top ? `${top.a}–${top.b} ${signed(top.cell.net48)}. ${Math.round(top.cell.seconds / 60)} shared minutes.` : "";
     return `<div class="scroll"><table class="pairs"><thead>${head}</thead><tbody>${body}</tbody></table></div><p class="readout">${e(readout)}</p>`;
   };
-  return `<section id="pairs">
-  <p class="kicker">06 / Pairings</p>
+  return `<section>
+  <p class="kicker">Players / Pairings</p>
   <h2>Who helps whom</h2>
   <p>${lede}</p>
   ${seasonPanels(report, matrix)}
@@ -300,28 +311,35 @@ function playersSection(report: PageData): string {
         ];
       }),
     );
-  return `<section id="players">
-  <p class="kicker">07 / Players</p>
+  return `<section>
+  <p class="kicker">Players / Impact</p>
   <h2>What kind of impact</h2>
   <p>${leader ? `${e(leader.last)} ${signed(onOff(leader)!)} on/off.` : ""}</p>
   ${seasonPanels(report, rows)}
 </section>`;
 }
 
-/** Everything inside <body>: header, main and footer. */
-export function renderBody(api: Report): string {
+/** By "layer/tab", as in route.ts. */
+const SECTIONS: Record<string, (report: PageData) => string> = {
+  "team/season": seasonCards,
+  "team/games": gamesSection,
+  "team/quarters": quartersSection,
+  "team/factors": factorsSection,
+  "team/situations": situationsSection,
+  "players/impact": playersSection,
+  "players/pairs": pairsSection,
+};
+
+/** Everything inside <body>: header, navigation, the hero, the tab in view, and the footer. */
+export function renderBody(api: Report, view: ReportView): string {
   const season = (key: string | null) => api.seasons.find((s) => s.key === key) ?? null;
   const report: PageData = { ...api, current: season(api.currentKey), lastRegular: season(api.lastRegularKey) };
   const updated = report.syncedAt ? `Updated ${dateTime(report.syncedAt)}` : "No data yet";
   return `${pageHeader()}
 <main>
-<nav>
-  <a href="#season">Season</a><a href="#games">Game to game</a><a href="#quarters">Quarters</a>
-  <a href="#factors">Offense and defense</a><a href="#situations">Situations</a><a href="#pairs">Pairings</a><a href="#players">Players</a>
-</nav>
+${layerNav(view.layer, view.tab)}
 ${hero(report)}
-${latestGame(report.latestGame)}
-${report.current ? [seasonCards(report), gamesSection(report), quartersSection(report), factorsSection(report), situationsSection(report), pairsSection(report), playersSection(report)].join("\n") : ""}
+${report.current ? (SECTIONS[`${view.layer}/${view.tab}`]?.(report) ?? "") : ""}
 </main>
 <footer>
   <p>ESPN box scores and play-by-play. ${updated}. ${report.gameCount} games. On-court splits keep a game when the lineup replay is within ${report.replayTolerance} points of the box plus-minus (${report.replayedGames} of ${report.gameCount} kept).</p>
