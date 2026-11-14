@@ -1,8 +1,10 @@
 import "./styles.css";
 import type { Report } from "./api/Report.ts";
 import type { GameDetail } from "./api/GameDetail.ts";
+import type { PlayerDetail } from "./api/PlayerDetail.ts";
 import { renderGame, renderGameNotFound } from "./render/gamePage.ts";
 import { renderBody } from "./render/page.ts";
+import { renderPlayer, renderPlayerNotFound } from "./render/playerPage.ts";
 import { parseHash, type View } from "./route.ts";
 import { startSync } from "./sync.ts";
 
@@ -77,6 +79,10 @@ async function html(view: View): Promise<string> {
   if (view.page === "game") {
     const game = await load<GameDetail>(`/api/games/${view.id}`);
     return game ? renderGame(game) : renderGameNotFound();
+  }
+  if (view.page === "player") {
+    const player = await load<PlayerDetail>(`/api/players/${view.id}`);
+    return player ? renderPlayer(player) : renderPlayerNotFound();
   }
   const report = await load<Report>("/api/report");
   if (!report) throw new Error("/api/report answered 404");

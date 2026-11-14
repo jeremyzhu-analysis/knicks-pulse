@@ -17,10 +17,20 @@ pub struct LineupTotals {
     pub pts_against: i32,
 }
 
+/// A player's time on the floor in one period.
+#[derive(Default, Clone, Copy)]
+pub struct FloorPeriod {
+    pub seconds: f64,
+    pub pts_for: i32,
+    pub pts_against: i32,
+}
+
 pub struct Replay {
     pub ok: bool,
     /// In order of first appearance; float sums depend on it.
     pub lineups: Vec<LineupTotals>,
+    /// Each player's time on the floor by period, index 0 is Q1.
+    pub periods: HashMap<u32, Vec<FloorPeriod>>,
     /// Each player's time on the floor, oldest first.
     pub stints: HashMap<u32, Vec<Stint>>,
 }
@@ -155,6 +165,23 @@ impl Lineups {
     }
 }
 
+/// What each lineup did in each period, in order of first appearance.
+#[derive(Default)]
+struct PeriodLog {
+    list: Vec<(i32, usize, FloorPeriod)>,
+    index: HashMap<(i32, usize), usize>,
+}
+
+impl PeriodLog {
+    fn entry(&mut self, period: i32, lineup: usize) -> &mut FloorPeriod {
+        let i = *self.index.entry((period, lineup)).or_insert_with(|| {
+            self.list.push((period, lineup, FloorPeriod::default()));
+            self.list.len() - 1
+        });
+        &mut self.list[i].2
+    }
+}
+
 /// Rebuilds who was on the floor for the report team from substitutions.
 /// ESPN doesn't list who starts the 2nd quarter onward, so each period's
 /// five are inferred: players who appear before being subbed in, then
@@ -162,6 +189,7 @@ impl Lineups {
 pub fn replay_game(game: &Game) -> Replay {
     let roster: HashSet<u32> = game.players.iter().map(|p| p.player_id).collect();
     let mut lineups = Lineups::default();
+    let mut by_period = PeriodLog::default();
     let mut ok = true;
     let mut previous_end: Vec<u32> = game
         .players
@@ -206,13 +234,23 @@ pub fn replay_game(game: &Game) -> Replay {
         let mut clock = period_seconds(period);
         let mut current = lineups.entry(&on_floor);
         for play in &plays {
-            let entry = &mut lineups.list[current];
-            entry.seconds += f64::max(0.0, clock - play.clock_seconds);
+            let seconds = f64::max(0.0, clock - play.clock_seconds);
             clock = play.clock_seconds;
             let d_home = play.home_score - last_home;
             let d_away = play.away_score - last_away;
-            entry.pts_for += if game.home { d_home } else { d_away };
-            entry.pts_against += if game.home { d_away } else { d_home };
+            let (pts_for, pts_against) = if game.home {
+                (d_home, d_away)
+            } else {
+                (d_away, d_home)
+            };
+            let entry = &mut lineups.list[current];
+            entry.seconds += seconds;
+            entry.pts_for += pts_for;
+            entry.pts_against += pts_against;
+            let in_period = by_period.entry(period, current);
+            in_period.seconds += seconds;
+            in_period.pts_for += pts_for;
+            in_period.pts_against += pts_against;
             last_home = play.home_score;
             last_away = play.away_score;
 
@@ -235,6 +273,7 @@ pub fn replay_game(game: &Game) -> Replay {
             }
         }
         lineups.list[current].seconds += clock;
+        by_period.entry(period, current).seconds += clock;
         previous_end = on_floor.0;
     }
 
@@ -256,8 +295,21 @@ pub fn replay_game(game: &Game) -> Replay {
             ok = false;
         }
     }
+    let mut periods: HashMap<u32, Vec<FloorPeriod>> = HashMap::new();
+    for (period, lineup, totals) in &by_period.list {
+        for &id in &lineups.list[*lineup].players {
+            let of_player = periods
+                .entry(id)
+                .or_insert_with(|| vec![FloorPeriod::default(); game.periods.max(0) as usize]);
+            let slot = &mut of_player[*period as usize - 1];
+            slot.seconds += totals.seconds;
+            slot.pts_for += totals.pts_for;
+            slot.pts_against += totals.pts_against;
+        }
+    }
     Replay {
         ok,
+        periods,
         lineups: lineups.list,
         stints: stints.done,
     }
@@ -430,6 +482,13 @@ mod tests {
                 to: at(1, 0.0, 10, 9),
             }]
         );
+        let on_floor = |id: u32| {
+            let q1 = replay.periods[&id][0];
+            (q1.seconds, q1.pts_for, q1.pts_against)
+        };
+        assert_eq!(on_floor(1), (420.0, 10, 4));
+        assert_eq!(on_floor(6), (300.0, 0, 5));
+        assert_eq!(on_floor(2), (720.0, 10, 9));
     }
 
     #[test]

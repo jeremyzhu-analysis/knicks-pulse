@@ -28,6 +28,8 @@ struct Built {
     report: Bytes,
     /// By game id.
     games: HashMap<String, Bytes>,
+    /// By player id.
+    players: HashMap<String, Bytes>,
 }
 
 struct AppState {
@@ -53,9 +55,18 @@ impl AppState {
             let json = serde_json::to_vec(&api::game_detail(game))?;
             games.insert(game.id.clone(), Bytes::from(json));
         }
+        let (report, player_details) = api::report(&data)?;
+        let mut players = HashMap::new();
+        for player in &player_details {
+            players.insert(
+                player.id.to_string(),
+                Bytes::from(serde_json::to_vec(player)?),
+            );
+        }
         let built = Arc::new(Built {
-            report: Bytes::from(serde_json::to_vec(&api::report(&data)?)?),
+            report: Bytes::from(serde_json::to_vec(&report)?),
             games,
+            players,
         });
         *cached = Some(built.clone());
         Ok(built)
@@ -154,6 +165,19 @@ async fn sync_now(
     }
 }
 
+async fn player_detail(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> axum::response::Response {
+    match state.built().await {
+        Ok(built) => match built.players.get(&id) {
+            Some(json) => json_response(json.clone()),
+            None => (StatusCode::NOT_FOUND, "Not found").into_response(),
+        },
+        Err(error) => server_error(error),
+    }
+}
+
 /// Only successful responses get a cache header; errors stay uncached.
 fn cache_on_success<B>(
     value: &'static str,
@@ -173,6 +197,7 @@ fn app(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/api/report", get(report))
         .route("/api/games/{id}", get(game_detail))
+        .route("/api/players/{id}", get(player_detail))
         .route("/api/sync", get(sync_status).post(sync_now))
         .with_state(state)
         .nest_service(

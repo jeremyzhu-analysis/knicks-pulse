@@ -328,7 +328,7 @@ function playersSection(report: PageData): string {
     return table(
       head,
       s.playerReport.players.map((p: PlayerRow) => [
-        `${e(p.name)}${p.position ? ` <span class="pos">${e(p.position)}</span>` : ""}`,
+        `<a href="#player/${p.id}">${e(p.name)}</a>${p.position ? ` <span class="pos">${e(p.position)}</span>` : ""}`,
         String(p.gp),
         sortCell(p.mpg, fixed(p.mpg)), sortCell(p.ppg, fixed(p.ppg)), sortCell(p.rpg, fixed(p.rpg)), sortCell(p.apg, fixed(p.apg)),
         sortCell(p.ts, percent(p.ts)), sortCell(p.plusMinus, signed(p.plusMinus)),

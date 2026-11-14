@@ -10,7 +10,7 @@ use serde::Serialize;
 use ts_rs::TS;
 
 use crate::report::dates::{day_number, last_name, season_label};
-use crate::report::lineups::{GameMoment, Replay, Stint, replay_game};
+use crate::report::lineups::{FloorPeriod, GameMoment, Replay, Stint, replay_game};
 use crate::report::load::{BoxScore, Dataset, Game, PlayerGame};
 
 // ---------------------------------------------------------------- basics
@@ -462,7 +462,22 @@ pub struct Impact {
     pub tone: ImpactTone,
 }
 
-#[derive(Serialize, TS)]
+/// A player's season in one quarter.
+#[derive(Serialize, TS, Clone)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PlayerQuarter {
+    pub quarter: i32,
+    /// Points per game, over the games whose play-by-play adds up to the
+    /// player's points; null without such a game.
+    pub pts: Option<f64>,
+    /// Net points per game while on the floor, and the opponent's points per
+    /// 48 minutes then; null without a usable replay.
+    pub plus_minus: Option<f64>,
+    pub opp48: Option<f64>,
+}
+
+#[derive(Serialize, TS, Clone)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct PlayerRow {
@@ -480,11 +495,20 @@ pub struct PlayerRow {
     pub bpg: f64,
     pub topg: f64,
     pub ts: f64,
+    /// Share of the team's possessions the player ended while on the floor,
+    /// in percent: each game's rate weighted by the minutes played in it.
+    pub usg: f64,
     pub plus_minus: f64,
     /// Net points per 48 with the player on and off the floor; null without a usable replay.
     pub on48: Option<f64>,
     pub off48: Option<f64>,
+    /// Points per 48 by the team and by its opponent, with the player on and off.
+    pub team48_on: Option<f64>,
+    pub team48_off: Option<f64>,
     pub opp48: Option<f64>,
+    pub opp48_off: Option<f64>,
+    /// Q1 to Q4.
+    pub quarters: Vec<PlayerQuarter>,
     /// `on48 - off48`.
     pub on_off: Option<f64>,
     /// The same player's `on_off` in the regular season before; set only in
@@ -599,7 +623,42 @@ impl FloorTime {
     }
 }
 
-pub fn player_report(games: &[&Game], replays: &HashMap<&str, Replay>) -> PlayerReport {
+/// A possession ends with a shot, a trip to the line or a turnover.
+fn possessions_used(fga: i32, fta: i32, tov: i32) -> f64 {
+    f64::from(fga) + 0.44 * f64::from(fta) + f64::from(tov)
+}
+
+/// The player's share of the team's possessions in one game, in percent,
+/// scaled to the time they were on the floor.
+fn usage(p: &PlayerGame, game: &Game) -> f64 {
+    let team_minutes: i32 = game.players.iter().map(|l| l.minutes).sum();
+    let team = possessions_used(game.us.fga, game.us.fta, game.us.tov);
+    if p.minutes <= 0 || team <= 0.0 {
+        return 0.0;
+    }
+    100.0 * possessions_used(p.fga, p.fta, p.tov) * (f64::from(team_minutes) / 5.0)
+        / (f64::from(p.minutes) * team)
+}
+
+/// Each game's points by period, by game id.
+pub type PeriodPoints<'a> = HashMap<&'a str, HashMap<u32, Vec<i32>>>;
+
+/// One quarter of a player's season, summed over games.
+#[derive(Default, Clone, Copy)]
+struct QuarterTotals {
+    /// Games whose play-by-play adds up to the player's points.
+    scored_games: i32,
+    pts: i32,
+    /// Replayed games the player appeared in.
+    floor_games: i32,
+    floor: FloorPeriod,
+}
+
+pub fn player_report(
+    games: &[&Game],
+    replays: &HashMap<&str, Replay>,
+    points: &PeriodPoints,
+) -> PlayerReport {
     let mut team = FloorTime::default();
     let mut on: HashMap<u32, FloorTime> = HashMap::new();
     let mut together: HashMap<(u32, u32), FloorTime> = HashMap::new();
@@ -631,7 +690,11 @@ pub fn player_report(games: &[&Game], replays: &HashMap<&str, Replay>) -> Player
     // Players in order of first appearance; it breaks ties in the minutes sort below.
     let mut order: Vec<u32> = Vec::new();
     let mut by_id: HashMap<u32, Vec<&PlayerGame>> = HashMap::new();
+    let mut usage_minutes: HashMap<u32, f64> = HashMap::new();
+    let mut quarters: HashMap<u32, [QuarterTotals; 4]> = HashMap::new();
     for game in games {
+        let replay = replays.get(game.id.as_str()).filter(|r| r.ok);
+        let game_points = points.get(game.id.as_str());
         for p in &game.players {
             by_id
                 .entry(p.player_id)
@@ -640,6 +703,23 @@ pub fn player_report(games: &[&Game], replays: &HashMap<&str, Replay>) -> Player
                     Vec::new()
                 })
                 .push(p);
+            *usage_minutes.entry(p.player_id).or_default() += usage(p, game) * f64::from(p.minutes);
+            let totals = quarters.entry(p.player_id).or_default();
+            let scored = game_points.and_then(|g| g.get(&p.player_id));
+            let floor = replay.and_then(|r| r.periods.get(&p.player_id));
+            for (q, total) in totals.iter_mut().enumerate() {
+                if let Some(scored) = scored {
+                    total.scored_games += 1;
+                    total.pts += scored.get(q).copied().unwrap_or(0);
+                }
+                if let Some(floor) = floor {
+                    let f = floor.get(q).copied().unwrap_or_default();
+                    total.floor_games += 1;
+                    total.floor.seconds += f.seconds;
+                    total.floor.pts_for += f.pts_for;
+                    total.floor.pts_against += f.pts_against;
+                }
+            }
         }
     }
 
@@ -655,6 +735,19 @@ pub fn player_report(games: &[&Game], replays: &HashMap<&str, Replay>) -> Player
             let floor = on.get(id);
             let off_seconds = team.seconds - floor.map_or(0.0, |f| f.seconds);
             let split = floor.filter(|f| f.seconds > 0.0 && off_seconds > 0.0);
+            let quarters = quarters[id]
+                .iter()
+                .enumerate()
+                .map(|(q, t)| PlayerQuarter {
+                    quarter: q as i32 + 1,
+                    pts: (t.scored_games > 0).then(|| f64::from(t.pts) / f64::from(t.scored_games)),
+                    plus_minus: (t.floor_games > 0).then(|| {
+                        f64::from(t.floor.pts_for - t.floor.pts_against) / f64::from(t.floor_games)
+                    }),
+                    opp48: (t.floor.seconds > 0.0)
+                        .then(|| per48(f64::from(t.floor.pts_against), t.floor.seconds)),
+                })
+                .collect();
             let mut row = PlayerRow {
                 id: *id,
                 name: first.full_name.clone(),
@@ -673,6 +766,7 @@ pub fn player_report(games: &[&Game], replays: &HashMap<&str, Replay>) -> Player
                     total(|l| f64::from(l.pts)),
                     2.0 * total(|l| f64::from(l.fga) + 0.44 * f64::from(l.fta)),
                 ),
+                usg: ratio(usage_minutes[id], f64::from(minutes)),
                 plus_minus: total(|l| f64::from(l.plus_minus)) / n,
                 on48: split.map(|f| per48(f64::from(f.pts_for - f.pts_against), f.seconds)),
                 off48: split.map(|f| {
@@ -681,7 +775,12 @@ pub fn player_report(games: &[&Game], replays: &HashMap<&str, Replay>) -> Player
                         off_seconds,
                     )
                 }),
+                team48_on: split.map(|f| per48(f64::from(f.pts_for), f.seconds)),
+                team48_off: split.map(|f| per48(f64::from(team.pts_for - f.pts_for), off_seconds)),
                 opp48: split.map(|f| per48(f64::from(f.pts_against), f.seconds)),
+                opp48_off: split
+                    .map(|f| per48(f64::from(team.pts_against - f.pts_against), off_seconds)),
+                quarters,
                 on_off: None,
                 previous_on_off: None,
                 impact: Impact {
@@ -960,6 +1059,7 @@ pub struct Report<'a> {
     pub last_regular: Option<usize>,
     pub latest_game: Option<&'a Game>,
     pub last_series: Option<LastSeries>,
+    pub points: PeriodPoints<'a>,
 }
 
 /// "NBA Finals - Game 5" -> "Finals"
@@ -996,10 +1096,15 @@ pub fn build_report(data: &Dataset) -> Report<'_> {
         .iter()
         .map(|g| (g.id.as_str(), replay_game(g)))
         .collect();
+    let points: PeriodPoints = data
+        .games
+        .iter()
+        .map(|g| (g.id.as_str(), points_by_period(g)))
+        .collect();
     let mut seasons: Vec<SeasonReport> = group_seasons(&data.games)
         .into_iter()
         .map(|season| SeasonReport {
-            player_report: player_report(&season.games, &replays),
+            player_report: player_report(&season.games, &replays, &points),
             season,
         })
         .collect();
@@ -1059,6 +1164,7 @@ pub fn build_report(data: &Dataset) -> Report<'_> {
         last_regular,
         latest_game: data.games.last(),
         last_series,
+        points,
     }
 }
 

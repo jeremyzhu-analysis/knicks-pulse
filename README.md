@@ -10,7 +10,7 @@ renders it in the browser.
 
 - Rust, version pinned in `rust-toolchain.toml`. One binary, `knicks`, with
   three commands: `serve`, `migrate` and `sync`. Axum serves `/api/report`,
-  `/api/games/{id}`, `/api/sync` and the built page, sqlx talks to MySQL, and
+  `/api/games/{id}`, `/api/players/{id}`, `/api/sync` and the built page, sqlx talks to MySQL, and
   reqwest fetches ESPN.
   The ESPN client trusts Mozilla's root certificates compiled into the
   binary (`webpki-root-certs`), not the macOS keychain.
@@ -18,7 +18,7 @@ renders it in the browser.
   `/api/report` and writes the HTML one tab at a time, in two layers: Team
   (`#team/season`, `games`, `quarters`, `factors`, `situations`) and Players
   (`#players/impact`, `pairs`). `#game/{id}` shows one game from
-  `/api/games/{id}`. The routes are in `web/src/route.ts`. The API's TypeScript types in
+  `/api/games/{id}` and `#player/{id}` one player from `/api/players/{id}`. The routes are in `web/src/route.ts`. The API's TypeScript types in
   `web/src/api/` are generated from the Rust structs by ts-rs whenever
   `cargo test` runs; don't edit them by hand.
 - Node.js 26.13.1 (`.nvmrc`) runs Vite and TypeScript 7 (`npm run typecheck`).
@@ -125,6 +125,12 @@ Other free sources checked:
   plays ESPN credits to them; a player whose plays don't add up to their
   box-score points shows no split. Largest lead comes from the same
   play-by-play.
+- Usage is a player's share of the team's possessions while on the floor:
+  `100 · (FGA + 0.44·FTA + TOV) · (team minutes / 5) / (minutes · team (FGA +
+  0.44·FTA + TOV))` per game, averaged over the season by minutes played.
+- A player's quarter splits use the same replay: net points per game and the
+  opponent's points per 48 minutes while the player was on the floor in that
+  quarter.
 - Game score is `PTS + 0.4·FGM − 0.7·FGA − 0.4·(FTA − FTM) + 0.7·OREB +
   0.3·DREB + STL + 0.7·AST + 0.7·BLK − 0.4·PF − TOV`.
 - The impact label's thresholds are in the `impact` module of

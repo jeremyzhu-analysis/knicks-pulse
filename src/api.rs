@@ -7,9 +7,10 @@ use ts_rs::TS;
 
 use crate::report::compute::PAIR_MIN_SECONDS;
 use crate::report::compute::{
-    Factors, GamePlayer, GameSide, LastSeries, PlayerReport, QuarterRow, Ratings,
-    Report as Computed, Rolling, SeasonReport, Situation, build_report, factors, flow,
+    Factors, GamePlayer, GameSide, LastSeries, PeriodPoints, PlayerReport, PlayerRow, QuarterRow,
+    Ratings, Report as Computed, Rolling, SeasonReport, Situation, build_report, factors, flow,
     game_players, game_sides, points_by_period, quarters, ratings, rolling_margins, situations,
+    won,
 };
 use crate::report::dates::new_york;
 use crate::report::lineups::{GameMoment, REPLAY_TOLERANCE, replay_game};
@@ -152,6 +153,88 @@ pub struct GameDetail {
     pub opponents: Vec<GamePlayer>,
 }
 
+/// A game the player appeared in, with their line.
+#[derive(Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PlayerLogGame {
+    #[serde(flatten)]
+    pub game: Game,
+    pub line: GamePlayer,
+}
+
+/// One season of a player.
+#[derive(Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PlayerSeason {
+    /// As in `Season`.
+    pub key: String,
+    pub label: String,
+    pub row: PlayerRow,
+    /// The team's record in the games the player appeared in.
+    pub wins: i32,
+    pub losses: i32,
+    /// Oldest first.
+    pub games: Vec<PlayerLogGame>,
+}
+
+/// `GET /api/players/{id}`.
+#[derive(Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PlayerDetail {
+    pub id: u32,
+    pub name: String,
+    pub position: Option<String>,
+    /// Most recent first, as in the report; only seasons the player appeared in.
+    pub seasons: Vec<PlayerSeason>,
+}
+
+fn player_details(seasons: &[SeasonReport], points: &PeriodPoints) -> Vec<PlayerDetail> {
+    let mut details: Vec<PlayerDetail> = Vec::new();
+    for s in seasons {
+        for row in &s.player_report.players {
+            let mut log = Vec::new();
+            let mut wins = 0;
+            for g in &s.season.games {
+                let Some(line) = g.players.iter().find(|p| p.player_id == row.id) else {
+                    continue;
+                };
+                wins += i32::from(won(g));
+                let no_points = Default::default();
+                let game_points = points.get(g.id.as_str()).unwrap_or(&no_points);
+                log.extend(
+                    game_players(std::slice::from_ref(line), game_points, None)
+                        .into_iter()
+                        .map(|line| PlayerLogGame {
+                            game: game(g),
+                            line,
+                        }),
+                );
+            }
+            let season = PlayerSeason {
+                key: s.season.key.clone(),
+                label: s.season.label.clone(),
+                row: row.clone(),
+                wins,
+                losses: log.len() as i32 - wins,
+                games: log,
+            };
+            match details.iter_mut().find(|d| d.id == row.id) {
+                Some(detail) => detail.seasons.push(season),
+                None => details.push(PlayerDetail {
+                    id: row.id,
+                    name: row.name.clone(),
+                    position: row.position.clone(),
+                    seasons: vec![season],
+                }),
+            }
+        }
+    }
+    details
+}
+
 pub fn game_detail(g: &load::Game) -> GameDetail {
     let replay = replay_game(g);
     let flow = flow(g);
@@ -207,7 +290,8 @@ fn season(s: SeasonReport) -> Season {
     }
 }
 
-pub fn report(data: &Dataset) -> Result<Report> {
+/// The report, and the page of every player in it.
+pub fn report(data: &Dataset) -> Result<(Report, Vec<PlayerDetail>)> {
     let Computed {
         game_count,
         replayed_games,
@@ -216,7 +300,9 @@ pub fn report(data: &Dataset) -> Result<Report> {
         last_regular,
         latest_game,
         last_series,
+        points,
     } = build_report(data);
+    let players = player_details(&seasons, &points);
     let now = current.map(|i| seasons[i].season.games.as_slice());
     let was = last_regular.map(|i| seasons[i].season.games.as_slice());
     let tz = new_york()?;
@@ -242,7 +328,7 @@ pub fn report(data: &Dataset) -> Result<Report> {
         }
     });
 
-    Ok(Report {
+    let report = Report {
         synced_at: data.synced_at.map(|t| t.to_string()),
         game_count,
         replayed_games,
@@ -256,5 +342,6 @@ pub fn report(data: &Dataset) -> Result<Report> {
         quarters,
         factors,
         situations,
-    })
+    };
+    Ok((report, players))
 }
