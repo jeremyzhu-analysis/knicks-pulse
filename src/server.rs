@@ -21,7 +21,7 @@ use crate::report::load::load_dataset;
 use crate::{api, sync};
 
 /// Built by `npm run build`; paths are relative to the repo root.
-const DIST: &str = "web/dist";
+pub const DIST: &str = "web/dist";
 
 struct AppState {
     pool: MySqlPool,

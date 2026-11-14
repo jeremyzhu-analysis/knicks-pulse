@@ -8,6 +8,7 @@ import { renderBody } from "./render/page.ts";
 import { renderPlayer, renderPlayerNotFound } from "./render/playerPage.ts";
 import { wireShots } from "./render/shots.ts";
 import { parseHash, type View } from "./route.ts";
+import { snapshot } from "./snapshot.ts";
 import { startSync } from "./sync.ts";
 
 /**
@@ -69,6 +70,7 @@ function wire(): void {
 const loaded = new Map<string, unknown>();
 
 async function load<T>(url: string): Promise<T | null> {
+  if (snapshot) return (snapshot.documents[url] as T | undefined) ?? null;
   if (!loaded.has(url)) {
     const res = await fetch(url);
     if (!res.ok && res.status !== 404) throw new Error(`${url} answered ${res.status}`);

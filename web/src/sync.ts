@@ -1,12 +1,15 @@
 import type { SyncOutcome } from "./api/SyncOutcome.ts";
 import type { SyncStatus } from "./api/SyncStatus.ts";
 import { dateTime } from "./format.ts";
+import { snapshot } from "./snapshot.ts";
 
-let checkedAt: string | null = null;
+let checkedAt: string | null = snapshot?.checkedAt ?? null;
 let state: "idle" | "checking" | "failed" = "idle";
 let onAdded: () => void = () => {};
 
 function inner(): string {
+  // An exported page has no server to ask.
+  if (snapshot) return checkedAt ? `Snapshot checked ${dateTime(checkedAt)}` : "Snapshot";
   const last = checkedAt ? `Checked ${dateTime(checkedAt)}` : "Not checked yet";
   const text = state === "checking" ? "Checking for new games…" : state === "failed" ? `Check failed. ${last}` : last;
   return `${text} <button type="button" data-sync${state === "checking" ? " disabled" : ""}>Check for new games</button>`;
@@ -45,6 +48,7 @@ async function check(): Promise<void> {
  * load; `added` runs after a check that stored a new game.
  */
 export async function startSync(added: () => void): Promise<void> {
+  if (snapshot) return;
   onAdded = added;
   document.addEventListener("click", (event) => {
     if (event.target instanceof Element && event.target.closest("[data-sync]")) void check();
