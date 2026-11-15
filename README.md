@@ -25,34 +25,71 @@ renders it in the browser.
 - Node.js 26.13.1 (`.nvmrc`) runs Vite and TypeScript 7 (`npm run typecheck`).
 - MySQL 9 in a Podman container.
 
-## Setup
+## Quickstart (macOS)
 
 MySQL runs in a Podman container for this project only (`compose.yaml`,
-host port 3307, data in the `knicks_mysql-data` volume).
+host port 3307, data in the `knicks_mysql-data` volume). Rust and Node are
+installed on the Mac itself.
 
-Install Podman with the macOS installer from podman.io (the Homebrew
-formula is community-maintained). `podman compose` hands off to a separate
-compose provider; this setup uses `podman-compose`. A standalone
-`docker-compose` on the PATH takes precedence over it.
+### 1. Install the tools (once per machine)
+
+| Tool | Install | Used for |
+| --- | --- | --- |
+| Xcode command line tools | `xcode-select --install` | the linker Rust needs |
+| rustup | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` | the Rust version in `rust-toolchain.toml` |
+| nvm | the install script in the [nvm README](https://github.com/nvm-sh/nvm#installing-and-updating) | the Node version in `.nvmrc` |
+| Podman | the macOS installer from [podman.io](https://podman.io) (the Homebrew formula is community-maintained) | the MySQL container |
+| podman-compose | `uv tool install podman-compose` (uv: `brew install uv`) | `podman compose` hands off to it |
+
+A standalone `docker-compose` on the PATH takes precedence over
+`podman-compose`.
+
+### 2. Start MySQL
+
+```sh
+podman machine init                   # once per machine
+podman machine start                  # again after every restart of the Mac
+podman compose up -d                  # `podman compose down` stops it and keeps the data
+```
+
+`podman compose down -v` also deletes the data volume.
+
+### 3. Build and run
 
 Run everything from the repo root: the binary reads `.env` and serves
 `web/dist` relative to the current directory.
 
 ```sh
-uv tool install podman-compose        # once per machine
-podman machine init && podman machine start
-podman compose up -d                  # start MySQL; `podman compose down` stops it
 rustup toolchain install              # the version in rust-toolchain.toml
-nvm use                               # Node 26.13.1, for Vite
+nvm install                           # the version in .nvmrc
 npm install
 cp .env.example .env                  # already points at the container
-cargo run -- migrate                  # creates the tables; adds new columns to existing ones
-cargo run -- sync                     # loads games from ESPN (first run: ~110 requests)
+cargo run -- migrate                  # creates the tables
+cargo run -- sync                     # loads two seasons of games from ESPN (first run: about 120 requests)
 npm run build                         # builds the page into web/dist
 cargo run --release -- serve          # http://localhost:3000
 ```
 
-`podman compose down -v` also deletes the data volume.
+### Updating
+
+After pulling a new version:
+
+```sh
+npm install
+cargo run -- migrate                  # adds new tables and columns; keeps the data
+npm run build
+cargo run --release -- serve          # the sync at startup fetches games stored in an older format again
+```
+
+### When something fails
+
+- `migrate`, `sync` or `serve` says "Connection refused": MySQL isn't up.
+  Run `podman machine start` and `podman compose up -d`; the container needs
+  a moment after starting before it accepts connections.
+- The page answers "Not found": `web/dist` is missing, run `npm run build`.
+- Port 3000 is taken: set `PORT` in `.env`.
+
+### Other commands
 
 `cargo run -- export knicks.html` writes the whole site (the report, every
 game, every player and the shot maps) as one HTML file that opens from disk

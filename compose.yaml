@@ -1,5 +1,5 @@
 # This project's own MySQL, separate from any server on the machine.
-# Each project needs its own host port; 3306 belongs to the Homebrew mysqld.
+# Host port 3307 leaves 3306 free for a MySQL installed on the machine.
 name: knicks
 
 services:
