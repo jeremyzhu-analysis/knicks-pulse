@@ -1,11 +1,4 @@
-import type { Factor } from "../api/Factor.ts";
-import type { Game } from "../api/Game.ts";
-import type { Headline } from "../api/Headline.ts";
-import type { LatestGame } from "../api/LatestGame.ts";
-import type { PlayerRow } from "../api/PlayerRow.ts";
-import type { Report } from "../api/Report.ts";
-import type { Season } from "../api/Season.ts";
-import type { ShotMap } from "../api/ShotMap.ts";
+import type { Factor, Game, Headline, LatestGame, PlayerRow, Report, Season, ShotMap } from "../../../server/schema.ts";
 import { dateTime, escapeHtml as e, fixed, lastName, longDate, percent, record, shortDate, signed } from "../format.ts";
 import { heat, marginChart, quarterChart, rollingDefault } from "./charts.ts";
 import { knicksMark, liberty } from "./brand.ts";
@@ -67,7 +60,7 @@ function headlineText(headline: Headline | null): string {
 
 function hero(report: PageData): string {
   const now = report.current;
-  if (!now) return `<section><h1>No games stored yet</h1><p class="note">Run <code>cargo run -- sync</code> to load games from ESPN.</p></section>`;
+  if (!now) return `<section><h1>No games stored yet</h1><p class="note">Run <code>npm run sync</code> to load games from ESPN.</p></section>`;
   const r = now.ratings;
   const last = report.lastRegular?.ratings ?? null;
 

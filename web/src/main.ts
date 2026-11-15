@@ -1,8 +1,5 @@
 import "./styles.css";
-import type { Report } from "./api/Report.ts";
-import type { ShotMap } from "./api/ShotMap.ts";
-import type { GameDetail } from "./api/GameDetail.ts";
-import type { PlayerDetail } from "./api/PlayerDetail.ts";
+import type { GameDetail, PlayerDetail, Report, ShotMap } from "../../server/schema.ts";
 import { renderGame, renderGameNotFound } from "./render/gamePage.ts";
 import { renderBody } from "./render/page.ts";
 import { renderPlayer, renderPlayerNotFound } from "./render/playerPage.ts";

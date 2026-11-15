@@ -1,6 +1,4 @@
-import type { GameMoment } from "../api/GameMoment.ts";
-import type { Season } from "../api/Season.ts";
-import type { QuarterRow } from "../api/QuarterRow.ts";
+import type { GameMoment, QuarterRow, Season } from "../../../server/schema.ts";
 import { escapeHtml, fixed, longDate, signed } from "../format.ts";
 import { hosted, margin, won } from "./game.ts";
 

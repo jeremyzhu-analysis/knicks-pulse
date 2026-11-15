@@ -3,41 +3,42 @@
 A report on the New York Knicks. It started from the design in
 `design/index.html`, a single long page; the report now shows its sections as
 tabs. Game data comes from ESPN's public site API and is stored
-in MySQL. A Rust server computes the report and serves it as JSON; the page
+in MySQL. A Node.js server computes the report and serves it as JSON; the page
 renders it in the browser.
 
 ## Stack
 
-- Rust, version pinned in `rust-toolchain.toml`. One binary, `knicks`, with
-  four commands: `serve`, `migrate`, `sync` and `export`. Axum serves `/api/report`,
-  `/api/games/{id}`, `/api/players/{id}`, `/api/shots`, `/api/sync` and the built page, sqlx talks to MySQL, and
-  reqwest fetches ESPN.
-  The ESPN client trusts Mozilla's root certificates compiled into the
-  binary (`webpki-root-certs`), not the macOS keychain.
+- Node.js 26.13.1 (`.nvmrc`) runs the server in `server/` straight from its
+  TypeScript files; there is no build step for it. `server/main.ts` has four
+  commands, each an npm script: `serve`, `migrate`, `sync` and `export`.
+  Fastify serves `/api/report`, `/api/games/{id}`, `/api/players/{id}`,
+  `/api/shots`, `/api/sync` and the built page, mysql2 talks to MySQL, and
+  Node's `fetch` gets the games from ESPN.
+- `server/schema.ts` is the API's contract: a JSON Schema, written with
+  TypeBox, for every route's parameters, query, body and responses. The
+  server validates requests and writes responses with them, and the page
+  imports its types from the same file.
 - The page is plain TypeScript built with Vite (`web/`). It fetches
   `/api/report` and writes the HTML one tab at a time, in two layers: Team
   (`#team/season`, `games`, `quarters`, `factors`, `situations`) and Players
   (`#players/impact`, `pairs`, `shots`; `#players/shots/{id}` opens the
   shot map on one player). `#game/{id}` shows one game from
-  `/api/games/{id}` and `#player/{id}` one player from `/api/players/{id}`. The routes are in `web/src/route.ts`. The API's TypeScript types in
-  `web/src/api/` are generated from the Rust structs by ts-rs whenever
-  `cargo test` runs; don't edit them by hand.
-- Node.js 26.13.1 (`.nvmrc`) runs Vite and TypeScript 7 (`npm run typecheck`).
+  `/api/games/{id}` and `#player/{id}` one player from `/api/players/{id}`. The routes are in `web/src/route.ts`.
+- TypeScript 7 checks both the page and the server (`npm run typecheck`);
+  `npm test` runs the server's tests with `node:test`.
 - MySQL 9 in a Podman container.
 
 ## Quickstart (macOS)
 
 MySQL runs in a Podman container for this project only (`compose.yaml`,
-host port 3307, data in the `knicks_mysql-data` volume). Rust and Node are
+host port 3307, data in the `knicks_mysql-data` volume). Node is
 installed on the Mac itself.
 
 ### 1. Install the tools (once per machine)
 
 | Tool | Install | Used for |
 | --- | --- | --- |
-| Xcode command line tools | `xcode-select --install` | the linker Rust needs |
-| rustup | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` | the Rust version in `rust-toolchain.toml` |
-| nvm | the install script in the [nvm README](https://github.com/nvm-sh/nvm#installing-and-updating) | the Node version in `.nvmrc` |
+| nvm | the install script in the [nvm README](https://github.com/nvm-sh/nvm#installing-and-updating) | the Node version in `.nvmrc`; then `npm install -g npm@12` (Node 26 ships npm 11) |
 | Podman | the macOS installer from [podman.io](https://podman.io) (the Homebrew formula is community-maintained) | the MySQL container |
 | podman-compose | `uv tool install podman-compose` (uv: `brew install uv`) | `podman compose` hands off to it |
 
@@ -56,18 +57,17 @@ podman compose up -d                  # `podman compose down` stops it and keeps
 
 ### 3. Build and run
 
-Run everything from the repo root: the binary reads `.env` and serves
+Run everything from the repo root: the server reads `.env` and serves
 `web/dist` relative to the current directory.
 
 ```sh
-rustup toolchain install              # the version in rust-toolchain.toml
 nvm install                           # the version in .nvmrc
 npm install
 cp .env.example .env                  # already points at the container
-cargo run -- migrate                  # creates the tables
-cargo run -- sync                     # loads two seasons of games from ESPN (first run: about 120 requests)
+npm run migrate                       # creates the tables
+npm run sync                          # loads two seasons of games from ESPN (first run: about 120 requests)
 npm run build                         # builds the page into web/dist
-cargo run --release -- serve          # http://localhost:3000
+npm run serve                         # http://localhost:3000
 ```
 
 ### Updating
@@ -76,9 +76,9 @@ After pulling a new version:
 
 ```sh
 npm install
-cargo run -- migrate                  # adds new tables and columns; keeps the data
+npm run migrate                       # adds new tables and columns; keeps the data
 npm run build
-cargo run --release -- serve          # the sync at startup fetches games stored in an older format again
+npm run serve                         # the sync at startup fetches games stored in an older format again
 ```
 
 ### When something fails
@@ -88,19 +88,23 @@ cargo run --release -- serve          # the sync at startup fetches games stored
   a moment after starting before it accepts connections.
 - The page answers "Not found": `web/dist` is missing, run `npm run build`.
 - Port 3000 is taken: set `PORT` in `.env`.
+- A value in `.env` is cut short: an unquoted value ends at `#`, so put
+  quotes around one that contains it.
 
 ### Other commands
 
-`cargo run -- export knicks.html` writes the whole site (the report, every
+`npm run export -- knicks.html` writes the whole site (the report, every
 game, every player and the shot maps) as one HTML file that opens from disk
 without a server. It inlines the page built by `npm run build` and the data
 as stored at that moment, so build and sync first. The file shows when its
 data was last checked and has no "Check for new games" button.
 
-While working on the page, run `cargo run -- serve` for the API on port 3000
+While working on the page, run `npm run serve` for the API on port 3000
 and `npm run dev` for the page on Vite's port (5173); Vite forwards `/api` to
-port 3000. After changing a type the API sends (`src/api.rs`,
-`src/report/compute.rs`), run `cargo test` to regenerate `web/src/api/`.
+port 3000. To change what the API sends, change its schema in
+`server/schema.ts` first: the type-check then points at the server code and
+the page code that no longer fit. Restart `npm run serve` after changing
+server code.
 
 The server listens on `127.0.0.1` only (`HOST` in `.env`). To open it from
 other devices on your tailnet, run `tailscale serve --bg 3000` on this machine
@@ -108,15 +112,18 @@ and use the `https://<machine>.<tailnet>.ts.net` address it prints;
 `tailscale serve reset` stops it.
 
 The server syncs once at startup and then every `SYNC_INTERVAL_MINUTES`
-(default 60, `0` means only at startup). The page also asks for a sync each
-time it loads and from the header's "Check for new games" button
-(`POST /api/sync`; `GET /api/sync` tells when the last one finished). The
+(default 60, `0` means only at startup). The header's "Check for new games"
+button asks for one too (`POST /api/sync`; `GET /api/sync` tells when the
+last one finished). That request must carry `SYNC_SECRET` from `.env` as
+`Authorization: Bearer <secret>`; the page asks for the secret on the first
+click and keeps it in the browser's local storage. With `SYNC_SECRET` empty
+the route refuses every request. The
 header then says what the check did: how many new games it stored, or how
 many recent ones it fetched again. Syncs
 never overlap: a request made while one runs starts none. A sync fetches the games that
 aren't stored yet, and the stored ones written in an older format: each game
-records the `STORE_FORMAT` (`src/sync.rs`) it was stored with, so after an
-update that stores more per game, run `cargo run -- migrate` and the next sync
+records the `STORE_FORMAT` (`server/sync.ts`) it was stored with, so after an
+update that stores more per game, run `npm run migrate` and the next sync
 fetches every game once more.
 ESPN corrects a game for a while after it ends, so a game is also fetched
 again on every sync until 36 hours after its start. A game whose ESPN summary
@@ -170,7 +177,7 @@ Other free sources checked:
 - Home and Road leave out games at a neutral site.
 - On/off and pairings replay the play-by-play to know who was on the floor.
   ESPN doesn't list who starts the 2nd quarter onward, so the replay infers it
-  (`src/report/lineups.rs`). A game is used for on-court numbers only when
+  (`server/report/lineups.ts`). A game is used for on-court numbers only when
   every player's replayed plus-minus is within 8 points of the box score.
 - A game's stints come from the same replay, and are left out when that game
   fails the check above. Each one's net points can differ from the box score
@@ -191,23 +198,24 @@ Other free sources checked:
   player's attempts there can be a few short of the box score.
 - Game score is `PTS + 0.4·FGM − 0.7·FGA − 0.4·(FTA − FTM) + 0.7·OREB +
   0.3·DREB + STL + 0.7·AST + 0.7·BLK − 0.4·PF − TOV`.
-- The impact label's thresholds are in the `impact` module of
-  `src/report/compute.rs`; the label text and tooltip are in
+- The impact label's thresholds are `IMPACT` in
+  `server/report/compute.ts`; the label text and tooltip are in
   `web/src/render/impact.ts`.
 
 ## Layout
 
 ```
 db/schema.sql          tables (datetimes in UTC)
-src/main.rs            the knicks commands: serve, migrate, sync, export
-src/server.rs          HTTP server, JSON cache, sync timer
-src/export.rs          the site as one HTML file
-src/espn.rs            ESPN client and parsing
-src/espn_core.rs       a game from ESPN's core API, when the summary is missing
-src/sync.rs            stores completed games
-src/report/            load from MySQL, lineup replay, metrics
-src/api.rs             the JSON the page reads
+server/main.ts         the commands: serve, migrate, sync, export
+server/schema.ts       the API's contract: JSON Schemas and the types derived from them
+server/app.ts          HTTP routes, built page, JSON cache, sync timer
+server/api.ts          builds the JSON the page reads
+server/export.ts       the site as one HTML file
+server/espn.ts         ESPN client and parsing
+server/espnCore.ts     a game from ESPN's core API, when the summary is missing
+server/sync.ts         stores completed games
+server/db.ts           connection pool, migrate
+server/report/         load from MySQL, lineup replay, metrics
 web/src/               the page: routes, HTML, SVG charts, CSS, number formatting
-web/src/api/           API types generated by ts-rs
 design/index.html      the original design
 ```

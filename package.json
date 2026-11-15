@@ -3,14 +3,26 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=26.13.1"
+    "node": ">=26.13.1",
+    "npm": ">=12.2.2"
   },
   "scripts": {
+    "serve": "node server/main.ts serve",
+    "migrate": "node server/main.ts migrate",
+    "sync": "node server/main.ts sync",
+    "export": "node server/main.ts export",
     "dev": "vite web",
     "build": "vite build web",
-    "typecheck": "tsc -p web"
+    "typecheck": "tsc -p web && tsc -p server",
+    "test": "node --test \"server/**/*.test.ts\""
+  },
+  "dependencies": {
+    "fastify": "5.12.8",
+    "mysql2": "3.24.6",
+    "typebox": "1.4.6"
   },
   "devDependencies": {
+    "@types/node": "26.6.6",
     "typescript": "7.0.2",
     "vite": "8.3.5"
   }

@@ -1,5 +1,5 @@
 /**
- * What `knicks export` puts in a page so it needs no server: every document
+ * What `npm run export` puts in a page so it needs no server: every document
  * of the API by path, and when the data was last checked. Null on the served
  * site.
  */

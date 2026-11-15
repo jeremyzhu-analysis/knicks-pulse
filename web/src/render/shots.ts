@@ -1,6 +1,4 @@
-import type { Season } from "../api/Season.ts";
-import type { ShotMap } from "../api/ShotMap.ts";
-import type { Shooter } from "../api/Shooter.ts";
+import type { Season, Shooter, ShotMap } from "../../../server/schema.ts";
 import { escapeHtml as e } from "../format.ts";
 
 const [WIDTH, HEIGHT] = [500, 500];

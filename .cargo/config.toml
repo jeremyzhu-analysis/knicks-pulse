@@ -1,3 +1,0 @@
-[env]
-# ts-rs writes the TypeScript types for the API here when `cargo test` runs.
-TS_RS_EXPORT_DIR = { value = "web/src/api", relative = true }

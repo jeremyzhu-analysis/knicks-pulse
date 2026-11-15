@@ -1,8 +1,4 @@
-import type { GameDetail } from "../api/GameDetail.ts";
-import type { GameMoment } from "../api/GameMoment.ts";
-import type { GamePlayer } from "../api/GamePlayer.ts";
-import type { GameSide } from "../api/GameSide.ts";
-import type { Stint } from "../api/Stint.ts";
+import type { GameDetail, GameMoment, GamePlayer, GameSide, Stint } from "../../../server/schema.ts";
 import { escapeHtml as e, fixed, percent, signed } from "../format.ts";
 import { flowChart } from "./charts.ts";
 import { margin, won } from "./game.ts";

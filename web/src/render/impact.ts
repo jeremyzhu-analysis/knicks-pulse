@@ -1,5 +1,4 @@
-import type { ImpactKind } from "../api/ImpactKind.ts";
-import type { PlayerRow } from "../api/PlayerRow.ts";
+import type { ImpactKind, PlayerRow } from "../../../server/schema.ts";
 
 /** Under this many games the tooltip mentions the sample size. */
 const SMALL_SAMPLE_GAMES = 10;

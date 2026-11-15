@@ -1,5 +1,4 @@
-import type { PlayerDetail } from "../api/PlayerDetail.ts";
-import type { PlayerSeason } from "../api/PlayerSeason.ts";
+import type { PlayerDetail, PlayerSeason } from "../../../server/schema.ts";
 import { escapeHtml as e, fixed, percent, record, shortDate, signed } from "../format.ts";
 import { hosted, won } from "./game.ts";
 import { impactLabel, impactTitle } from "./impact.ts";
