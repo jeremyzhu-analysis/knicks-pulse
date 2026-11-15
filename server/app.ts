@@ -4,6 +4,7 @@ import { stat } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
+import rateLimit from "@fastify/rate-limit";
 import fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import type { Pool } from "mysql2/promise";
 
@@ -109,8 +110,33 @@ async function sendFile(request: FastifyRequest, reply: FastifyReply, root: stri
   return reply.send(createReadStream(file));
 }
 
-export function buildApp(backend: Backend, syncSecret: string | null, dist = DIST): App {
-  const server = fastify();
+/** Requests one address may make per minute: to everything, and to start a sync (wrong secrets count). */
+const REQUESTS_PER_MINUTE = 300;
+const SYNCS_PER_MINUTE = 5;
+
+/** Sent with every response. The page's scripts and styles are its own files, plus style attributes it writes. */
+const SECURITY_HEADERS = {
+  "content-security-policy":
+    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY",
+  "referrer-policy": "no-referrer",
+  "cross-origin-opener-policy": "same-origin",
+};
+
+export async function buildApp(backend: Backend, syncSecret: string | null, dist = DIST): Promise<App> {
+  const server = fastify({
+    // A tunnel or reverse proxy on this machine connects from loopback and
+    // names the visitor in X-Forwarded-For; only then is that header believed,
+    // so request.ip is the visitor's address and not the proxy's.
+    trustProxy: "loopback",
+    // No route reads more than an empty body.
+    bodyLimit: 1024,
+  });
+  await server.register(rateLimit, { global: true, max: REQUESTS_PER_MINUTE, timeWindow: "1 minute" });
+  server.addHook("onSend", async (_request, reply) => {
+    reply.headers(SECURITY_HEADERS);
+  });
 
   // The documents only change when a sync stores games, so they're built once
   // and kept until then. Keeping the promise makes concurrent first requests
@@ -139,10 +165,11 @@ export function buildApp(backend: Backend, syncSecret: string | null, dist = DIS
     return sync;
   };
 
-  server.setNotFoundHandler((_request, reply) => notFound(reply));
+  server.setNotFoundHandler({ preHandler: server.rateLimit() }, (_request, reply) => notFound(reply));
   server.setErrorHandler((error: { validation?: unknown; validationContext?: string; statusCode?: number }, _request, reply) => {
     // An id that isn't a number names no document.
     if (error.validation && error.validationContext === "params") return notFound(reply);
+    if (error.statusCode === 429) return text(reply, 429, "Too many requests");
     if (error.statusCode !== undefined && error.statusCode >= 400 && error.statusCode < 500) {
       return text(reply, error.statusCode, "Bad request");
     }
@@ -203,9 +230,11 @@ export function buildApp(backend: Backend, syncSecret: string | null, dist = DIS
       schema: {
         querystring: NoQuery,
         body: NoBody,
-        response: { 200: SyncOutcome, 401: Message, 403: Message, ...errors },
+        response: { 200: SyncOutcome, 401: Message, 403: Message, 429: Message, ...errors },
       },
-      onRequest: async (request, reply) => {
+      config: { rateLimit: { max: SYNCS_PER_MINUTE, timeWindow: "1 minute" } },
+      // After onRequest, where the rate limiter counts the attempt.
+      preParsing: async (request, reply) => {
         // Browsers say where a request comes from; one sent by another site's page is refused.
         const site = request.headers["sec-fetch-site"];
         if (site !== undefined && site !== "same-origin") return text(reply, 403, "Forbidden");
@@ -268,7 +297,7 @@ async function syncLoop(app: App, minutes: number, stop: AbortSignal): Promise<v
 
 export async function serve(config: Config, pool: Pool): Promise<void> {
   const espn = new Espn();
-  const app = buildApp(
+  const app = await buildApp(
     {
       documents: async () => documents(await loadDataset(pool, TEAM_ID)),
       checkedAt: () => checkedAt(pool),

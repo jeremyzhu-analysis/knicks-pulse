@@ -11,12 +11,14 @@
     "migrate": "node server/main.ts migrate",
     "sync": "node server/main.ts sync",
     "export": "node server/main.ts export",
+    "tunnel": "node server/tunnel.ts",
     "dev": "vite web",
     "build": "vite build web",
     "typecheck": "tsc -p web && tsc -p server",
     "test": "node --test \"server/**/*.test.ts\""
   },
   "dependencies": {
+    "@fastify/rate-limit": "11.2.2",
     "fastify": "5.12.8",
     "mysql2": "3.24.6",
     "typebox": "1.4.6"

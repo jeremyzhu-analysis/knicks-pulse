@@ -36,7 +36,7 @@ function backend(overrides: Partial<Backend> = {}): Backend & { syncs: number } 
 
 test("POST /api/sync needs the secret", async () => {
   const fake = backend();
-  const { server } = buildApp(fake, "s3cret", site());
+  const { server } = await buildApp(fake, "s3cret", site());
   const post = (headers: Record<string, string>) => server.inject({ method: "POST", url: "/api/sync", headers });
 
   assert.equal((await post({})).statusCode, 401);
@@ -54,7 +54,7 @@ test("POST /api/sync needs the secret", async () => {
 
 test("POST /api/sync is off without a configured secret", async () => {
   const fake = backend();
-  const { server } = buildApp(fake, null, site());
+  const { server } = await buildApp(fake, null, site());
   const res = await server.inject({ method: "POST", url: "/api/sync", headers: { authorization: "Bearer " } });
   assert.equal(res.statusCode, 403);
   assert.equal(fake.syncs, 0);
@@ -63,7 +63,7 @@ test("POST /api/sync is off without a configured secret", async () => {
 test("a second sync request during a sync starts none", async () => {
   let finish = (_: SyncResult) => {};
   const fake = backend({ sync: () => new Promise<SyncResult>((resolve) => (finish = resolve)) });
-  const { server } = buildApp(fake, "s3cret", site());
+  const { server } = await buildApp(fake, "s3cret", site());
   const post = () => server.inject({ method: "POST", url: "/api/sync", headers: { authorization: "Bearer s3cret" } });
   const first = post();
   await new Promise((resolve) => setImmediate(resolve));
@@ -81,7 +81,7 @@ test("documents are built once and again after a sync that stored games", async 
       return new Map<string, Document>([["/api/shots", report]]);
     },
   });
-  const app = buildApp(fake, null, site());
+  const app = await buildApp(fake, null, site());
   const get = () => app.server.inject({ url: "/api/shots" });
   const res = await get();
   assert.equal(res.statusCode, 200);
@@ -96,7 +96,7 @@ test("documents are built once and again after a sync that stored games", async 
 });
 
 test("unknown and malformed ids answer a plain 404", async () => {
-  const { server } = buildApp(backend(), null, site());
+  const { server } = await buildApp(backend(), null, site());
   for (const url of ["/api/games/1", "/api/games/abc", "/api/players/-1", "/api/nope"]) {
     const res = await server.inject({ url });
     assert.equal(res.statusCode, 404, url);
@@ -105,7 +105,7 @@ test("unknown and malformed ids answer a plain 404", async () => {
 });
 
 test("serves the built page with its cache headers and nothing outside it", async () => {
-  const { server } = buildApp(backend(), null, site());
+  const { server } = await buildApp(backend(), null, site());
   const page = await server.inject({ url: "/" });
   assert.equal(page.statusCode, 200);
   assert.equal(page.headers["content-type"], "text/html");
@@ -129,4 +129,59 @@ test("serves the built page with its cache headers and nothing outside it", asyn
     assert.notEqual(res.body, "secret", url);
     assert.notEqual(res.body, "hidden", url);
   }
+});
+
+test("every response carries the security headers", async () => {
+  const { server } = await buildApp(backend(), null, site());
+  for (const url of ["/", "/api/sync", "/nope"]) {
+    const res = await server.inject({ url });
+    assert.match(String(res.headers["content-security-policy"]), /default-src 'self'/, url);
+    assert.equal(res.headers["x-content-type-options"], "nosniff", url);
+    assert.equal(res.headers["x-frame-options"], "DENY", url);
+  }
+});
+
+test("sync attempts are limited per visitor, read from the proxy's header", async () => {
+  const fake = backend();
+  const { server } = await buildApp(fake, "s3cret", site());
+  // The tunnel connects from loopback and names the visitor in X-Forwarded-For.
+  const attempt = (visitor: string, secret = "wrong") =>
+    server.inject({
+      method: "POST",
+      url: "/api/sync",
+      remoteAddress: "127.0.0.1",
+      headers: { authorization: `Bearer ${secret}`, "x-forwarded-for": `10.9.9.9, ${visitor}` },
+    });
+  for (let i = 0; i < 5; i++) assert.equal((await attempt("203.0.113.1")).statusCode, 401);
+  const limited = await attempt("203.0.113.1", "s3cret");
+  assert.equal(limited.statusCode, 429);
+  assert.equal(limited.body, "Too many requests");
+  assert.ok(limited.headers["retry-after"]);
+  assert.equal(fake.syncs, 0);
+  // Another visitor has their own budget; the address a visitor claims for themselves is ignored.
+  assert.equal((await attempt("203.0.113.2", "s3cret")).statusCode, 200);
+});
+
+test("a visitor not behind a local proxy can't pick their address", async () => {
+  const { server } = await buildApp(backend(), "s3cret", site());
+  const attempt = (claimed: string) =>
+    server.inject({
+      method: "POST",
+      url: "/api/sync",
+      remoteAddress: "198.51.100.7",
+      headers: { authorization: "Bearer wrong", "x-forwarded-for": claimed },
+    });
+  for (let i = 0; i < 5; i++) assert.equal((await attempt(`203.0.113.${i}`)).statusCode, 401);
+  assert.equal((await attempt("203.0.113.99")).statusCode, 429);
+});
+
+test("a request body is refused", async () => {
+  const { server } = await buildApp(backend(), "s3cret", site());
+  const res = await server.inject({
+    method: "POST",
+    url: "/api/sync",
+    headers: { authorization: "Bearer s3cret", "content-type": "application/json" },
+    payload: JSON.stringify({ padding: "x".repeat(2000) }),
+  });
+  assert.equal(res.statusCode, 413);
 });

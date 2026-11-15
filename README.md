@@ -106,7 +106,8 @@ port 3000. To change what the API sends, change its schema in
 the page code that no longer fit. Restart `npm run serve` after changing
 server code.
 
-The server listens on `127.0.0.1` only (`HOST` in `.env`). To open it from
+The server listens on `127.0.0.1` only (`HOST` in `.env`). To share it with
+someone outside your network, see [Sharing through a Cloudflare tunnel](#sharing-through-a-cloudflare-tunnel). To open it from
 other devices on your tailnet, run `tailscale serve --bg 3000` on this machine
 and use the `https://<machine>.<tailnet>.ts.net` address it prints;
 `tailscale serve reset` stops it.
@@ -131,6 +132,53 @@ answers 404 is read from ESPN's core API instead (about 65 small requests);
 when that has nothing either, the game is skipped and asked for again on
 every sync. The time a sync last ran to the end is kept in `sync_status`. The
 report and game JSON are computed once and kept until a sync stores a game.
+
+## Sharing through a Cloudflare tunnel
+
+A quick tunnel gives the locally running site a public
+`https://<random words>.trycloudflare.com` address for free, without a
+Cloudflare account or a domain. `cloudflared` is a separate program:
+
+```sh
+brew install cloudflared              # once per machine
+```
+
+Then, with `SYNC_SECRET` set in `.env`:
+
+```sh
+npm run build
+npm run serve                         # in one terminal
+npm run tunnel                        # in another; prints the address
+```
+
+`npm run tunnel` runs `cloudflared tunnel --url` with `HOST` and `PORT`
+from `.env`, and refuses to start when `HOST` isn't a loopback address.
+Ctrl-C closes the tunnel, and the address stops working. What to know:
+
+- Anyone who has the address can read the site; there is no login. To ask
+  visitors for a one-time code sent to an email address you name, run
+  `npm run tunnel -- --allowed-mail mate@example.com`.
+- The address changes every time the tunnel starts. Cloudflare gives quick
+  tunnels no uptime guarantee and at most 200 requests in flight; they are
+  meant for testing.
+- Cloudflare ends the HTTPS connection, so it sees what passes through,
+  the sync secret included.
+
+What the server does for visitors from outside:
+
+- Starting a sync needs `SYNC_SECRET`; an address gets 5 tries a minute,
+  right or wrong, and 300 requests a minute overall, then `429`.
+- The visitor's address is taken from `X-Forwarded-For` only when the
+  connection comes from this machine, as the tunnel's does.
+- A request body over 1 KiB is refused, and every response carries a
+  content security policy and the usual hardening headers.
+- Everything else the tunnel reaches is read-only: the page, the report,
+  games, players and shots JSON, and `GET /api/sync` (when the last sync
+  finished). MySQL and the Vite dev server aren't behind the tunnel.
+
+A named tunnel would add an address that stays the same, on your own
+domain, and Cloudflare Access in front of it (a login for chosen people).
+It needs a Cloudflare account and a domain whose DNS is on Cloudflare.
 
 ## Data source
 
