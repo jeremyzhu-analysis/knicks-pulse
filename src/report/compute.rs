@@ -2,7 +2,7 @@
 //! order (games by date, lineups in order of first appearance); a different
 //! order changes the last digits of the results.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
 use jiff::tz::TimeZone;
@@ -936,8 +936,11 @@ pub fn player_report(
 
 // ---------------------------------------------------------------- one game
 
-/// The score after every play that changed it, from the opening tip at 0-0.
+/// The score after every scoring play, from the opening tip at 0-0. Points
+/// are added up from the plays and given to the scorer's team: ESPN's running
+/// score on a play is sometimes a point off the final.
 pub fn flow(game: &Game) -> Vec<GameMoment> {
+    let ours: HashSet<u32> = game.players.iter().map(|p| p.player_id).collect();
     let mut moments = vec![GameMoment {
         period: 1,
         clock_seconds: 720.0,
@@ -946,20 +949,20 @@ pub fn flow(game: &Game) -> Vec<GameMoment> {
     }];
     let (mut us, mut them) = (0, 0);
     for play in &game.plays {
-        let (now_us, now_them) = if game.home {
-            (play.home_score, play.away_score)
-        } else {
-            (play.away_score, play.home_score)
+        let Some(scorer) = play.players[0].filter(|_| play.score_value > 0) else {
+            continue;
         };
-        if (now_us, now_them) != (us, them) {
-            (us, them) = (now_us, now_them);
-            moments.push(GameMoment {
-                period: play.period,
-                clock_seconds: play.clock_seconds,
-                us,
-                them,
-            });
+        if ours.contains(&scorer) {
+            us += play.score_value;
+        } else {
+            them += play.score_value;
         }
+        moments.push(GameMoment {
+            period: play.period,
+            clock_seconds: play.clock_seconds,
+            us,
+            them,
+        });
     }
     moments
 }
