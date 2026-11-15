@@ -7,7 +7,7 @@ import type { Report } from "../api/Report.ts";
 import type { Season } from "../api/Season.ts";
 import type { ShotMap } from "../api/ShotMap.ts";
 import { dateTime, escapeHtml as e, fixed, lastName, longDate, percent, record, shortDate, signed } from "../format.ts";
-import { heat, marginChart, quarterChart, ROLLING_DEFAULT } from "./charts.ts";
+import { heat, marginChart, quarterChart, rollingDefault } from "./charts.ts";
 import { knicksMark, liberty } from "./brand.ts";
 import { hosted, margin, site, won } from "./game.ts";
 import { impactLabel, impactTitle } from "./impact.ts";
@@ -182,8 +182,9 @@ function gameLinks(games: Game[]): string {
 
 function gamesSection(report: PageData): string {
   const windows = report.current?.rolling.map((r) => r.window) ?? [];
+  const shown = rollingDefault(report.current);
   const windowSwitch = windows
-    .map((w) => `<button type="button" data-group="window" data-pick="${w}" class="${w === ROLLING_DEFAULT ? "on" : ""}">${w}-game average</button>`)
+    .map((w) => `<button type="button" data-group="window" data-pick="${w}" class="${w === shown ? "on" : ""}">${w}-game average</button>`)
     .join("");
   const latest = (s: Season) => {
     const g = s.games.at(-1);
@@ -194,7 +195,7 @@ function gamesSection(report: PageData): string {
   <h2>The margin, one night at a time</h2>
   <p>Dot is the final margin. Line is the running average.</p>
   <div class="switch">${windowSwitch}</div>
-  ${seasonPanels(report, (s) => `${marginChart(s)}<p class="readout">${latest(s)}</p><p class="note">Orange win. Blue loss. White line, running average. Point at a game for its numbers; pick it to see it player by player.</p>${gameLinks(s.games)}`)}
+  ${seasonPanels(report, (s) => `${marginChart(s, shown)}<p class="readout">${latest(s)}</p><p class="note">Orange win. Blue loss. White line, running average. Point at a game for its numbers; pick it to see it player by player.</p>${gameLinks(s.games)}`)}
 </section>`;
 }
 

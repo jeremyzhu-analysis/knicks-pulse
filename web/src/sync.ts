@@ -5,13 +5,24 @@ import { snapshot } from "./snapshot.ts";
 
 let checkedAt: string | null = snapshot?.checkedAt ?? null;
 let state: "idle" | "checking" | "failed" = "idle";
+/** What the last check of this page load did; empty before one finishes. */
+let outcome = "";
 let onAdded: () => void = () => {};
+
+const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+function told(result: SyncOutcome): string {
+  if (result.busy) return "A check is already running.";
+  if (result.added > 0) return `Stored ${count(result.added, "new game", "new games")}.`;
+  if (result.updated > 0) return `No new game. Refreshed ${count(result.updated, "recent game", "recent games")}.`;
+  return "No new game.";
+}
 
 function inner(): string {
   // An exported page has no server to ask.
   if (snapshot) return checkedAt ? `Snapshot checked ${dateTime(checkedAt)}` : "Snapshot";
   const last = checkedAt ? `Checked ${dateTime(checkedAt)}` : "Not checked yet";
-  const text = state === "checking" ? "Checking for new games…" : state === "failed" ? `Check failed. ${last}` : last;
+  const text = state === "checking" ? "Checking for new games…" : state === "failed" ? `Check failed. ${last}` : `${outcome} ${last}`.trim();
   return `${text} <button type="button" data-sync${state === "checking" ? " disabled" : ""}>Check for new games</button>`;
 }
 
@@ -32,10 +43,11 @@ async function check(): Promise<void> {
   try {
     const res = await fetch("/api/sync", { method: "POST" });
     if (!res.ok) throw new Error(`/api/sync answered ${res.status}`);
-    const outcome = (await res.json()) as SyncOutcome;
-    checkedAt = outcome.checkedAt;
+    const result = (await res.json()) as SyncOutcome;
+    checkedAt = result.checkedAt;
+    outcome = told(result);
     state = "idle";
-    if (outcome.added > 0) onAdded();
+    if (result.added > 0) onAdded();
   } catch (error) {
     console.error(error);
     state = "failed";

@@ -19,15 +19,15 @@ export function heat(value: number, scale: number): { bg: string; fg: string } {
   return { bg, fg: t > 0.5 ? "#140e0a" : "#f4f1ea" };
 }
 
-/** The running average shown until the reader picks another. */
-export const ROLLING_DEFAULT = 5;
+/** The running average shown until the reader picks another: the longer one once the season has enough games for it to differ. */
+export const rollingDefault = (season: Season | null) => (season && season.games.length >= 12 ? 10 : 5);
 
 /**
  * Dot per game for the final margin, line for the running average: one line
- * per window length, switched by the "window" group. A dot's data-tip is its
- * readout.
+ * per window length, switched by the "window" group, `shown` at first. A
+ * dot's data-tip is its readout.
  */
-export function marginChart(season: Season): string {
+export function marginChart(season: Season, shown: number): string {
   const games = season.games;
   if (games.length === 0) return `<p class="note">No games yet.</p>`;
   const margins = games.map(margin);
@@ -43,7 +43,7 @@ export function marginChart(season: Season): string {
         if (avg !== null) points.push(`${points.length ? "L" : "M"}${x(i).toFixed(1)},${y(avg).toFixed(1)}`);
       });
       if (points.length < 2) return "";
-      const hidden = rolling.window === ROLLING_DEFAULT ? "" : " hidden";
+      const hidden = rolling.window === shown ? "" : " hidden";
       return `<path data-group="window" data-panel="${rolling.window}"${hidden} d="${points.join(" ")}" fill="none" stroke="#f4f1ea" stroke-width="2.2"/>`;
     })
     .join("");

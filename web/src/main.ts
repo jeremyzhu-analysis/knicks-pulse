@@ -19,7 +19,7 @@ import { startSync } from "./sync.ts";
  * A data-tip element writes its tip into the readout of the panel around it.
  * A data-sort button in a column heading orders the table's rows by the
  * data-v of that column's cells, largest first; cells without a value stay
- * last.
+ * last. The stylesheet draws the arrow from the button's data-order.
  */
 function wire(): void {
   const group = (element: Element) => element.getAttribute("data-group") ?? "";
@@ -79,19 +79,25 @@ async function load<T>(url: string): Promise<T | null> {
   return loaded.get(url) as T | null;
 }
 
-async function html(view: View): Promise<string> {
+/** The browser tab's title on the report; a game or player page puts its own in front. */
+const SITE = document.title;
+
+/** A view's HTML and the name it adds to the tab title, if any. */
+async function html(view: View): Promise<{ body: string; name: string | null }> {
   if (view.page === "game") {
     const game = await load<GameDetail>(`/api/games/${view.id}`);
-    return game ? renderGame(game) : renderGameNotFound();
+    if (!game) return { body: renderGameNotFound(), name: null };
+    return { body: renderGame(game), name: `Knicks ${game.pts}, ${game.opponent.abbreviation} ${game.oppPts}` };
   }
   if (view.page === "player") {
     const player = await load<PlayerDetail>(`/api/players/${view.id}`);
-    return player ? renderPlayer(player) : renderPlayerNotFound();
+    if (!player) return { body: renderPlayerNotFound(), name: null };
+    return { body: renderPlayer(player), name: player.name };
   }
   const report = await load<Report>("/api/report");
   if (!report) throw new Error("/api/report answered 404");
   const shots = view.tab === "shots" ? await load<ShotMap[]>("/api/shots") : null;
-  return renderBody(report, view, shots);
+  return { body: renderBody(report, view, shots), name: null };
 }
 
 /** The page on screen, to tell a change of tab from a change of page. */
@@ -101,12 +107,13 @@ async function show(): Promise<void> {
   const hash = location.hash;
   const view = parseHash(hash);
   try {
-    const body = await html(view);
+    const { body, name } = await html(view);
     // The reader may have moved on while this was loading.
     if (location.hash !== hash) return;
     // The tabs share the hero above them, so a change of tab keeps the scroll position.
     const keepScroll = view.page === "report" && showing === "report";
     document.body.innerHTML = body;
+    document.title = name ? `${name} · ${SITE}` : SITE;
     showing = view.page;
     wire();
     wireShots();

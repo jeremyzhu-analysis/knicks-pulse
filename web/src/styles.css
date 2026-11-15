@@ -75,4 +75,6 @@ dd { margin: 0; }
 .shots .make { fill: #e07a3d; }
 .shots .miss { fill: none; stroke: #7eadd4; stroke-width: 1.2; }
 .shots svg[data-only="make"] .miss, .shots svg[data-only="miss"] .make { display: none; }
+th button.on[data-order="desc"]::after { content: " ↓"; }
+th button.on[data-order="asc"]::after { content: " ↑"; }
 .readout { color: #a39e94; font-size: 13px; min-height: 1.5em; }

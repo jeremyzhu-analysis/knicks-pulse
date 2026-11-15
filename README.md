@@ -110,7 +110,9 @@ and use the `https://<machine>.<tailnet>.ts.net` address it prints;
 The server syncs once at startup and then every `SYNC_INTERVAL_MINUTES`
 (default 60, `0` means only at startup). The page also asks for a sync each
 time it loads and from the header's "Check for new games" button
-(`POST /api/sync`; `GET /api/sync` tells when the last one finished). Syncs
+(`POST /api/sync`; `GET /api/sync` tells when the last one finished). The
+header then says what the check did: how many new games it stored, or how
+many recent ones it fetched again. Syncs
 never overlap: a request made while one runs starts none. A sync fetches the games that
 aren't stored yet, and the stored ones written in an older format: each game
 records the `STORE_FORMAT` (`src/sync.rs`) it was stored with, so after an
@@ -155,7 +157,9 @@ Other free sources checked:
   `TOV / (FGA + 0.44·FTA + TOV)`, offensive rebound rate
   `OREB / (OREB + opponent DREB)`, free-throw rate `FTA / FGA`.
 - The margin chart's running average covers the last 5 or 10 games of the
-  season (fewer early on) and starts at the third game.
+  season (fewer early on) and starts at the third game. It opens on the
+  10-game average once the current season has 12 games, on the 5-game one
+  before that.
 - The headline is whichever moved most since last regular season: offense or
   defense per 100 possessions, or a quarter's average margin (from the second
   game on). When nothing moved by a full point it compares net ratings.
