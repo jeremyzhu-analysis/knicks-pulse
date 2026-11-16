@@ -74,7 +74,25 @@ const CONTENT_TYPES: Record<string, string> = {
 const SAFE_SEGMENT = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
 
 /**
- * Sends a file of the built page. Every segment of the path must be a plain
+ * The bytes a Range header asks for, both ends included, or null when the
+ * file can't satisfy it. Only a single range is supported.
+ */
+function byteRange(header: string, size: number): { start: number; end: number } | null {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!match || (match[1] === "" && match[2] === "")) return null;
+  const last = size - 1;
+  // "-n" asks for the last n bytes.
+  if (match[1] === "") {
+    const length = Number(match[2]);
+    return length > 0 && size > 0 ? { start: Math.max(0, size - length), end: last } : null;
+  }
+  const start = Number(match[1]);
+  const end = match[2] === "" ? last : Math.min(Number(match[2]), last);
+  return start <= end ? { start, end } : null;
+}
+
+/**
+ * Sends a file of the built page, or the part of it a Range header asks for. Every segment of the path must be a plain
  * name, so the path can't leave `root`. Only a successful answer gets
  * `cacheControl`; errors stay uncached.
  */
@@ -106,6 +124,18 @@ async function sendFile(request: FastifyRequest, reply: FastifyReply, root: stri
       ? noneMatch.split(",").some((tag) => tag.trim().replace(/^W\//, "") === etag)
       : modified.getTime() <= Date.parse(request.headers["if-modified-since"] ?? "");
   if (unchanged) return reply.code(304).send();
+  reply.header("accept-ranges", "bytes");
+  const range = request.headers.range;
+  if (range !== undefined) {
+    const part = byteRange(range, found.size);
+    if (!part) return reply.removeHeader("cache-control").code(416).header("content-range", `bytes */${found.size}`).send();
+    reply
+      .code(206)
+      .type(CONTENT_TYPES[extname(file)] ?? "application/octet-stream")
+      .header("content-range", `bytes ${part.start}-${part.end}/${found.size}`)
+      .header("content-length", part.end - part.start + 1);
+    return reply.send(createReadStream(file, part));
+  }
   reply.type(CONTENT_TYPES[extname(file)] ?? "application/octet-stream").header("content-length", found.size);
   return reply.send(createReadStream(file));
 }
@@ -165,7 +195,13 @@ export async function buildApp(backend: Backend, syncSecret: string | null, dist
     return sync;
   };
 
-  server.setNotFoundHandler({ preHandler: server.rateLimit() }, (_request, reply) => notFound(reply));
+  // Every path answers GET, through the page's route at least, so a request
+  // no route takes has a method its path doesn't allow.
+  server.setNotFoundHandler({ preHandler: server.rateLimit() }, (request, reply) => {
+    if (request.method === "GET" || request.method === "HEAD") return notFound(reply);
+    const allowed = request.url.split("?", 1)[0] === "/api/sync" ? "GET,HEAD,POST" : "GET,HEAD";
+    return reply.code(405).header("allow", allowed).send();
+  });
   server.setErrorHandler((error: { validation?: unknown; validationContext?: string; statusCode?: number }, _request, reply) => {
     // An id that isn't a number names no document.
     if (error.validation && error.validationContext === "params") return notFound(reply);

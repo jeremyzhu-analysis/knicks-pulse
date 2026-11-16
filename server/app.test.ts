@@ -131,6 +131,50 @@ test("serves the built page with its cache headers and nothing outside it", asyn
   }
 });
 
+test("a method the path doesn't take answers 405 with the ones it does", async () => {
+  const { server } = await buildApp(backend(), "s3cret", site());
+  for (const [method, url, allow] of [
+    ["POST", "/api/report", "GET,HEAD"],
+    ["DELETE", "/api/sync", "GET,HEAD,POST"],
+    ["PUT", "/", "GET,HEAD"],
+    ["POST", "/nope", "GET,HEAD"],
+  ] as const) {
+    const res = await server.inject({ method, url });
+    assert.equal(res.statusCode, 405, `${method} ${url}`);
+    assert.equal(res.headers.allow, allow, `${method} ${url}`);
+    assert.equal(res.body, "", `${method} ${url}`);
+  }
+});
+
+test("sends the part of a file a Range header asks for", async () => {
+  const { server } = await buildApp(backend(), null, site());
+  const get = (range: string) => server.inject({ url: "/", headers: { range } });
+  const whole = await server.inject({ url: "/" });
+  assert.equal(whole.headers["accept-ranges"], "bytes");
+
+  // The page is "<!doctype html>", 15 bytes.
+  for (const [range, body, contentRange] of [
+    ["bytes=2-8", "doctype", "bytes 2-8/15"],
+    ["bytes=10-", "html>", "bytes 10-14/15"],
+    ["bytes=-5", "html>", "bytes 10-14/15"],
+    ["bytes=10-999", "html>", "bytes 10-14/15"],
+  ] as const) {
+    const res = await get(range);
+    assert.equal(res.statusCode, 206, range);
+    assert.equal(res.body, body, range);
+    assert.equal(res.headers["content-range"], contentRange, range);
+    assert.equal(res.headers["content-length"], String(body.length), range);
+    assert.equal(res.headers["content-type"], "text/html", range);
+  }
+
+  for (const range of ["bytes=15-", "bytes=9-2", "bytes=-0", "bytes=0-1,4-5", "lines=1-2"]) {
+    const res = await get(range);
+    assert.equal(res.statusCode, 416, range);
+    assert.equal(res.headers["content-range"], "bytes */15", range);
+    assert.equal(res.headers["cache-control"], undefined, range);
+  }
+});
+
 test("every response carries the security headers", async () => {
   const { server } = await buildApp(backend(), null, site());
   for (const url of ["/", "/api/sync", "/nope"]) {
