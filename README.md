@@ -26,6 +26,8 @@ renders it in the browser.
   `/api/games/{id}` and `#player/{id}` one player from `/api/players/{id}`. The routes are in `web/src/route.ts`.
 - TypeScript 7 checks both the page and the server (`npm run typecheck`);
   `npm test` runs the server's tests with `node:test`.
+- oxlint checks the code (`npm run lint`) and oxfmt formats it
+  (`npm run format`; `npm run format:check` only reports).
 - MySQL 9 in a Podman container.
 
 ## Quickstart (macOS)
@@ -36,11 +38,11 @@ installed on the Mac itself.
 
 ### 1. Install the tools (once per machine)
 
-| Tool | Install | Used for |
-| --- | --- | --- |
-| nvm | the install script in the [nvm README](https://github.com/nvm-sh/nvm#installing-and-updating) | the Node version in `.nvmrc`; then `npm install -g npm@12` (Node 26 ships npm 11) |
-| Podman | the macOS installer from [podman.io](https://podman.io) (the Homebrew formula is community-maintained) | the MySQL container |
-| podman-compose | `uv tool install podman-compose` (uv: `brew install uv`) | `podman compose` hands off to it |
+| Tool           | Install                                                                                                | Used for                                                                          |
+| -------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| nvm            | the install script in the [nvm README](https://github.com/nvm-sh/nvm#installing-and-updating)          | the Node version in `.nvmrc`; then `npm install -g npm@12` (Node 26 ships npm 11) |
+| Podman         | the macOS installer from [podman.io](https://podman.io) (the Homebrew formula is community-maintained) | the MySQL container                                                               |
+| podman-compose | `uv tool install podman-compose` (uv: `brew install uv`)                                               | `podman compose` hands off to it                                                  |
 
 A standalone `docker-compose` on the PATH takes precedence over
 `podman-compose`.
@@ -185,11 +187,11 @@ It needs a Cloudflare account and a domain whose DNS is on Cloudflare.
 ESPN's site API needs no key, but it is undocumented and could change without
 notice. The design's footer names it as its source, and its numbers match.
 
-| Endpoint | Used for |
-| --- | --- |
-| `site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/ny/schedule?season=YYYY&seasontype=2\|3` | Completed game ids per season (2 regular season, 3 playoffs), with the playoff series note. Without `season` it returns the current one. |
-| `site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=ID` | Score by quarter, team and player box scores, play-by-play with substitutions and shot positions, attendance, neutral site. |
-| `sports.core.api.espn.com/v2/sports/basketball/leagues/nba/events/ID/competitions/ID` and the documents it links (`plays`, and per team `roster`, `statistics`, `linescores`, `score`, each player's `statistics/0`) | The same game data, for games whose summary answers 404. |
+| Endpoint                                                                                                                                                                                                             | Used for                                                                                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/ny/schedule?season=YYYY&seasontype=2\|3`                                                                                                                 | Completed game ids per season (2 regular season, 3 playoffs), with the playoff series note. Without `season` it returns the current one. |
+| `site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=ID`                                                                                                                                              | Score by quarter, team and player box scores, play-by-play with substitutions and shot positions, attendance, neutral site.              |
+| `sports.core.api.espn.com/v2/sports/basketball/leagues/nba/events/ID/competitions/ID` and the documents it links (`plays`, and per team `roster`, `statistics`, `linescores`, `score`, each player's `statistics/0`) | The same game data, for games whose summary answers 404.                                                                                 |
 
 The sync stores the current and previous season, regular season and playoffs.
 

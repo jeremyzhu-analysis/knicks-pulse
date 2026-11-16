@@ -61,7 +61,7 @@ test("POST /api/sync is off without a configured secret", async () => {
 });
 
 test("a second sync request during a sync starts none", async () => {
-  let finish = (_: SyncResult) => {};
+  let finish: (result: SyncResult) => void = () => {};
   const fake = backend({ sync: () => new Promise<SyncResult>((resolve) => (finish = resolve)) });
   const { server } = await buildApp(fake, "s3cret", site());
   const post = () => server.inject({ method: "POST", url: "/api/sync", headers: { authorization: "Bearer s3cret" } });
@@ -123,7 +123,14 @@ test("serves the built page with its cache headers and nothing outside it", asyn
   assert.equal(missing.statusCode, 404);
   assert.equal(missing.headers["cache-control"], undefined);
 
-  for (const url of ["/../secret.txt", "/%2e%2e/secret.txt", "/..%2fsecret.txt", "/assets/..%2f..%2fsecret.txt", "/.hidden", "/assets%00"]) {
+  for (const url of [
+    "/../secret.txt",
+    "/%2e%2e/secret.txt",
+    "/..%2fsecret.txt",
+    "/assets/..%2f..%2fsecret.txt",
+    "/.hidden",
+    "/assets%00",
+  ]) {
     const res = await server.inject({ url });
     assert.equal(res.statusCode, 404, url);
     assert.notEqual(res.body, "secret", url);

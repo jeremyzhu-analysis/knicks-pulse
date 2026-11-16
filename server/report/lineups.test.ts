@@ -29,7 +29,15 @@ const playerLine = (id: number, plusMinus: number): PlayerGame => ({
   plusMinus,
 });
 
-const play = (period: number, clock: number, kind: string, home: number, away: number, a: number, b: number): PlayRow => ({
+const play = (
+  period: number,
+  clock: number,
+  kind: string,
+  home: number,
+  away: number,
+  a: number,
+  b: number,
+): PlayRow => ({
   period,
   clockSeconds: clock,
   typeText: kind,

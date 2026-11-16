@@ -15,7 +15,9 @@ function courtPath(): string {
   const arc: string[] = [];
   for (let i = 0; i <= 40; i++) {
     const angle = from + (to - from) * (i / 40);
-    arc.push(`${i ? "L" : "M"}${px(25 + threeRadius * Math.cos(angle)).toFixed(1)},${py(threeRadius * Math.sin(angle)).toFixed(1)}`);
+    arc.push(
+      `${i ? "L" : "M"}${px(25 + threeRadius * Math.cos(angle)).toFixed(1)},${py(threeRadius * Math.sin(angle)).toFixed(1)}`,
+    );
   }
   return [
     `M${px(0)},${py(baseline)} H${px(50)} V${py(halfCourt)} H${px(0)} Z`,
@@ -64,7 +66,12 @@ export function shotMap(map: ShotMap | undefined, selected: string | null): stri
 }
 
 /** The season to open on: the most recent one where the player has shots, else the current season. */
-export function shotSeason(maps: ShotMap[], seasons: Season[], selected: string | null, current: string | null): string | null {
+export function shotSeason(
+  maps: ShotMap[],
+  seasons: Season[],
+  selected: string | null,
+  current: string | null,
+): string | null {
   if (!selected) return current;
   const has = (key: string) => maps.find((m) => m.key === key)?.players.some((p) => String(p.id) === selected) ?? false;
   if (current && has(current)) return current;
@@ -80,7 +87,9 @@ export function wireShots(): void {
       button.addEventListener("click", () => {
         const id = button.getAttribute("data-shooter");
         pick("data-shooter", button);
-        map.querySelectorAll("circle").forEach((dot) => dot.toggleAttribute("hidden", id !== "" && dot.getAttribute("data-p") !== id));
+        map
+          .querySelectorAll("circle")
+          .forEach((dot) => dot.toggleAttribute("hidden", id !== "" && dot.getAttribute("data-p") !== id));
         const readout = map.querySelector(".readout");
         if (readout) readout.textContent = button.getAttribute("data-tally") || "";
       });

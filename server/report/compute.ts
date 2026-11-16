@@ -76,8 +76,14 @@ export function ratings(games: readonly Game[]): Ratings {
     defense,
     net: offense - defense,
     pace: ratio(48 * poss, sum(games, gameMinutes)),
-    scored: ratio(sum(games, (g) => g.pts), n),
-    allowed: ratio(sum(games, (g) => g.oppPts), n),
+    scored: ratio(
+      sum(games, (g) => g.pts),
+      n,
+    ),
+    allowed: ratio(
+      sum(games, (g) => g.oppPts),
+      n,
+    ),
   };
 }
 
@@ -414,11 +420,7 @@ type QuarterTotals = {
   floor: FloorPeriod;
 };
 
-export function playerReport(
-  games: readonly Game[],
-  replays: Map<string, Replay>,
-  points: PeriodPoints,
-): PlayerReport {
+export function playerReport(games: readonly Game[], replays: Map<string, Replay>, points: PeriodPoints): PlayerReport {
   const usable = (game: Game): Replay | null => {
     const replay = replays.get(game.id);
     return replay?.ok ? replay : null;
@@ -482,18 +484,14 @@ export function playerReport(
     const floor = on.get(id);
     const offSeconds = team.seconds - (floor ? floor.seconds : 0);
     const split = floor && floor.seconds > 0 && offSeconds > 0 ? floor : null;
-    const quarters = quarterTotals.get(id)!.map(
-      (t, q): PlayerQuarter => ({
-        quarter: q + 1,
-        pts: t.scoredGames > 0 ? t.pts / t.scoredGames : null,
-        plusMinus: t.floorGames > 0 ? (t.floor.ptsFor - t.floor.ptsAgainst) / t.floorGames : null,
-        opp48: t.floor.seconds > 0 ? per48(t.floor.ptsAgainst, t.floor.seconds) : null,
-      }),
-    );
+    const quarters = quarterTotals.get(id)!.map((t, q): PlayerQuarter => ({
+      quarter: q + 1,
+      pts: t.scoredGames > 0 ? t.pts / t.scoredGames : null,
+      plusMinus: t.floorGames > 0 ? (t.floor.ptsFor - t.floor.ptsAgainst) / t.floorGames : null,
+      opp48: t.floor.seconds > 0 ? per48(t.floor.ptsAgainst, t.floor.seconds) : null,
+    }));
     const on48 = split ? per48(split.ptsFor - split.ptsAgainst, split.seconds) : null;
-    const off48 = split
-      ? per48(team.ptsFor - split.ptsFor - (team.ptsAgainst - split.ptsAgainst), offSeconds)
-      : null;
+    const off48 = split ? per48(team.ptsFor - split.ptsFor - (team.ptsAgainst - split.ptsAgainst), offSeconds) : null;
     const onOff = on48 !== null && off48 !== null ? on48 - off48 : null;
     const rates = {
       gp,
@@ -599,10 +597,7 @@ export function gameSides(game: Game, flow: readonly GameMoment[]): [GameSide, G
       largestLead: Math.max(0, ...flow.map(lead)),
     };
   };
-  return [
-    build("us", game.us, (m) => m.us - m.them),
-    build("them", game.them, (m) => m.them - m.us),
-  ];
+  return [build("us", game.us, (m) => m.us - m.them), build("them", game.them, (m) => m.them - m.us)];
 }
 
 /** John Hollinger's game score: a box-score line as one number, on the scale of points. */
@@ -791,9 +786,10 @@ function stripGameSuffix(note: string): string | null {
 export function buildReport(data: Dataset): Computed {
   const replays = new Map(data.games.map((g) => [g.id, replayGame(g)]));
   const points: PeriodPoints = new Map(data.games.map((g) => [g.id, pointsByPeriod(g)]));
-  const seasons = groupSeasons(data.games).map(
-    (season): SeasonReport => ({ season, playerReport: playerReport(season.games, replays, points) }),
-  );
+  const seasons = groupSeasons(data.games).map((season): SeasonReport => ({
+    season,
+    playerReport: playerReport(season.games, replays, points),
+  }));
   const regular = seasons.flatMap((s, i) => (s.season.seasonType === 2 ? [i] : []));
   const current = regular[0] ?? (seasons.length === 0 ? null : 0);
   let lastRegular: number | null = null;

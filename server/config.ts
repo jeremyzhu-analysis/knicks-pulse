@@ -32,7 +32,12 @@ export function configFrom(env: Record<string, string | undefined>): Config {
     databaseUrl,
     host: get("HOST") ?? "127.0.0.1",
     port: wholeNumber("PORT", get("PORT"), 3000, 65_535),
-    syncIntervalMinutes: wholeNumber("SYNC_INTERVAL_MINUTES", get("SYNC_INTERVAL_MINUTES"), 60, Number.MAX_SAFE_INTEGER),
+    syncIntervalMinutes: wholeNumber(
+      "SYNC_INTERVAL_MINUTES",
+      get("SYNC_INTERVAL_MINUTES"),
+      60,
+      Number.MAX_SAFE_INTEGER,
+    ),
     syncSecret: get("SYNC_SECRET"),
   };
 }

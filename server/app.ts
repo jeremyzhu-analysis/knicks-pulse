@@ -128,7 +128,8 @@ async function sendFile(request: FastifyRequest, reply: FastifyReply, root: stri
   const range = request.headers.range;
   if (range !== undefined) {
     const part = byteRange(range, found.size);
-    if (!part) return reply.removeHeader("cache-control").code(416).header("content-range", `bytes */${found.size}`).send();
+    if (!part)
+      return reply.removeHeader("cache-control").code(416).header("content-range", `bytes */${found.size}`).send();
     reply
       .code(206)
       .type(CONTENT_TYPES[extname(file)] ?? "application/octet-stream")
@@ -202,16 +203,18 @@ export async function buildApp(backend: Backend, syncSecret: string | null, dist
     const allowed = request.url.split("?", 1)[0] === "/api/sync" ? "GET,HEAD,POST" : "GET,HEAD";
     return reply.code(405).header("allow", allowed).send();
   });
-  server.setErrorHandler((error: { validation?: unknown; validationContext?: string; statusCode?: number }, _request, reply) => {
-    // An id that isn't a number names no document.
-    if (error.validation && error.validationContext === "params") return notFound(reply);
-    if (error.statusCode === 429) return text(reply, 429, "Too many requests");
-    if (error.statusCode !== undefined && error.statusCode >= 400 && error.statusCode < 500) {
-      return text(reply, error.statusCode, "Bad request");
-    }
-    console.error(error);
-    return text(reply, 500, "Something went wrong.");
-  });
+  server.setErrorHandler(
+    (error: { validation?: unknown; validationContext?: string; statusCode?: number }, _request, reply) => {
+      // An id that isn't a number names no document.
+      if (error.validation && error.validationContext === "params") return notFound(reply);
+      if (error.statusCode === 429) return text(reply, 429, "Too many requests");
+      if (error.statusCode !== undefined && error.statusCode >= 400 && error.statusCode < 500) {
+        return text(reply, error.statusCode, "Bad request");
+      }
+      console.error(error);
+      return text(reply, 500, "Something went wrong.");
+    },
+  );
 
   // Sent as bytes: Fastify would add a charset to the content type of a
   // payload it serializes itself.
@@ -237,11 +240,15 @@ export async function buildApp(backend: Backend, syncSecret: string | null, dist
     return json(reply, bytes);
   };
 
-  server.get("/api/report", { schema: { querystring: NoQuery, response: { 200: Report, ...errors } } }, (_request, reply) =>
-    document("report", "/api/report", reply),
+  server.get(
+    "/api/report",
+    { schema: { querystring: NoQuery, response: { 200: Report, ...errors } } },
+    (_request, reply) => document("report", "/api/report", reply),
   );
-  server.get("/api/shots", { schema: { querystring: NoQuery, response: { 200: ShotMaps, ...errors } } }, (_request, reply) =>
-    document("shots", "/api/shots", reply),
+  server.get(
+    "/api/shots",
+    { schema: { querystring: NoQuery, response: { 200: ShotMaps, ...errors } } },
+    (_request, reply) => document("shots", "/api/shots", reply),
   );
   server.get<{ Params: IdParams }>(
     "/api/games/:id",

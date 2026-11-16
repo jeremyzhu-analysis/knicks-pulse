@@ -26,12 +26,23 @@ const AP_MONTHS = ["Jan.", "Feb.", "March", "April", "May", "June", "July", "Aug
 /** Takes the API's ISO 8601 UTC strings. */
 function parts(iso: string) {
   const values = new Intl.DateTimeFormat("en-US", {
-    timeZone: TIME_ZONE, year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+    timeZone: TIME_ZONE,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
   }).formatToParts(new Date(iso));
   const get = (type: string) => values.find((p) => p.type === type)?.value ?? "";
   return {
-    year: get("year"), month: Number(get("month")), day: get("day"),
-    hour: get("hour"), minute: get("minute"), dayPeriod: get("dayPeriod"), zone: get("timeZoneName"),
+    year: get("year"),
+    month: Number(get("month")),
+    day: get("day"),
+    hour: get("hour"),
+    minute: get("minute"),
+    dayPeriod: get("dayPeriod"),
+    zone: get("timeZoneName"),
   };
 }
 

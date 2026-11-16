@@ -131,7 +131,9 @@ export const PlayerQuarter = Type.Object({
     Type.Number({ description: "Net points per game while on the floor; null without a usable replay." }),
   ),
   opp48: Nullable(
-    Type.Number({ description: "The opponent's points per 48 minutes while on the floor; null without a usable replay." }),
+    Type.Number({
+      description: "The opponent's points per 48 minutes while on the floor; null without a usable replay.",
+    }),
   ),
 });
 export type PlayerQuarter = Static<typeof PlayerQuarter>;
@@ -227,8 +229,7 @@ export const GamePlayer = Type.Object({
   gameScore: Num,
   pointsByPeriod: Nullable(
     Type.Array(Int, {
-      description:
-        "Points by period, index 0 is Q1; null when the play-by-play doesn't add up to the player's points.",
+      description: "Points by period, index 0 is Q1; null when the play-by-play doesn't add up to the player's points.",
     }),
   ),
   stints: Type.Array(Stint, { description: "Empty for an opponent, and when the game's replay didn't hold up." }),
@@ -319,8 +320,7 @@ export const Report = Type.Object({
   gameCount: Int,
   replayedGames: Int,
   replayTolerance: Type.Integer({
-    description:
-      "A replay counts when every player's replayed plus-minus is within this many points of the box score.",
+    description: "A replay counts when every player's replayed plus-minus is within this many points of the box score.",
   }),
   pairMinSeconds: Type.Number({ description: "Pairings with less shared time than this are left blank." }),
   seasons: Type.Array(Season, { description: "Most recent first: current regular season, then older ones." }),

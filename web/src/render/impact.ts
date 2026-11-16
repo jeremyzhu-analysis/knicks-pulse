@@ -27,7 +27,9 @@ export function impactTitle(p: PlayerRow): string {
 
   const fmt = (v: number) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1);
   const floor =
-    p.on48 === null || p.off48 === null ? "" : ` On ${fmt(p.on48)}, off ${fmt(p.off48)}. Opp ${p.opp48!.toFixed(1)}/48.`;
+    p.on48 === null || p.off48 === null
+      ? ""
+      : ` On ${fmt(p.on48)}, off ${fmt(p.off48)}. Opp ${p.opp48!.toFixed(1)}/48.`;
   const sample = p.gp < SMALL_SAMPLE_GAMES ? ` The sample is ${games}.` : "";
   const leads: Record<Exclude<ImpactKind, "lowMinutes">, () => string> = {
     lineupDrag: () => "lineup drag",

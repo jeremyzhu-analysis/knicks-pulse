@@ -24,13 +24,19 @@ function seasonPanel(s: PlayerSeason): string {
   );
   const log = table(
     ["Game", "Result", "Min", "Pts", "Reb", "Ast", "+/−", "Q1", "Q2", "Q3", "Q4", "GmSc"],
-    [...s.games].reverse().map((g) => [
-      `<a href="#game/${e(g.id)}">${shortDate(g.startsAt)} ${hosted(g) ? "vs" : "@"} ${e(g.opponent.abbreviation)}</a>`,
-      `<span class="${won(g) ? "" : "loss"}">${won(g) ? "W" : "L"} ${g.pts}–${g.oppPts}</span>`,
-      String(g.line.minutes), String(g.line.pts), String(g.line.reb), String(g.line.ast), signed(g.line.plusMinus, 0),
-      ...[0, 1, 2, 3].map((i) => (g.line.pointsByPeriod ? String(g.line.pointsByPeriod[i] ?? 0) : "—")),
-      fixed(g.line.gameScore),
-    ]),
+    [...s.games]
+      .reverse()
+      .map((g) => [
+        `<a href="#game/${e(g.id)}">${shortDate(g.startsAt)} ${hosted(g) ? "vs" : "@"} ${e(g.opponent.abbreviation)}</a>`,
+        `<span class="${won(g) ? "" : "loss"}">${won(g) ? "W" : "L"} ${g.pts}–${g.oppPts}</span>`,
+        String(g.line.minutes),
+        String(g.line.pts),
+        String(g.line.reb),
+        String(g.line.ast),
+        signed(g.line.plusMinus, 0),
+        ...[0, 1, 2, 3].map((i) => (g.line.pointsByPeriod ? String(g.line.pointsByPeriod[i] ?? 0) : "—")),
+        fixed(g.line.gameScore),
+      ]),
   );
   return `<div class="tiles">${[
     tile("Knicks per 48, on", r.team48On, "Points scored with the player on the floor"),
@@ -52,8 +58,18 @@ export function renderPlayer(player: PlayerDetail): string {
   const lines = table(
     ["Season", "GP", "Min", "Pts", "Reb", "Ast", "TS%", "Usage", "+/−", "On /48", "Off /48", "Opp/48"],
     player.seasons.map(({ label, row: r }) => [
-      e(label), String(r.gp), fixed(r.mpg), fixed(r.ppg), fixed(r.rpg), fixed(r.apg), percent(r.ts), `${fixed(r.usg)}%`,
-      signed(r.plusMinus), orDash(r.on48, signed), orDash(r.off48, signed), orDash(r.opp48),
+      e(label),
+      String(r.gp),
+      fixed(r.mpg),
+      fixed(r.ppg),
+      fixed(r.rpg),
+      fixed(r.apg),
+      percent(r.ts),
+      `${fixed(r.usg)}%`,
+      signed(r.plusMinus),
+      orDash(r.on48, signed),
+      orDash(r.off48, signed),
+      orDash(r.opp48),
     ]),
   );
   const panels = [...player.seasons].reverse();

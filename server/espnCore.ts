@@ -179,7 +179,8 @@ export function build(
     const participants = [...items(at(p, "participants"))].sort(
       (a, b) => number(at(a, "order")) - number(at(b, "order")),
     );
-    const participant = (i: number) => (i < participants.length ? idInRef(at(participants[i], "athlete"), "/athletes/") : null);
+    const participant = (i: number) =>
+      i < participants.length ? idInRef(at(participants[i], "athlete"), "/athletes/") : null;
     const coordinate = at(p, "coordinate");
     return {
       period: number(at(at(p, "period"), "number")),

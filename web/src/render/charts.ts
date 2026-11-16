@@ -58,7 +58,9 @@ export function marginChart(season: Season, shown: number): string {
   return (
     `<svg viewBox="0 0 860 260" role="img" aria-label="Game margin">` +
     `<line x1="${left}" x2="${right}" y1="${mid}" y2="${mid}" stroke="#2a2a2a"/>` +
-    label(`+${top}`, mid - half + 4) + label("0", mid + 4) + label(`-${top}`, mid + half + 4) +
+    label(`+${top}`, mid - half + 4) +
+    label("0", mid + 4) +
+    label(`-${top}`, mid + half + 4) +
     lines +
     dots +
     `</svg>`
@@ -101,21 +103,31 @@ export function flowChart(flow: GameMoment[], periods: number): string {
   const [left, right, mid, half] = [36, 852, 110, 92];
   const x = (seconds: number) => left + ((right - left) * Math.min(total, seconds)) / total;
   const y = (v: number) => mid - (v / top) * half;
-  const steps = flow.map((m, i) => `${i ? "H" : "M"}${x(elapsed(m)).toFixed(1)}${i ? "V" : ","}${y(margins[i]!).toFixed(1)}`);
+  const steps = flow.map(
+    (m, i) => `${i ? "H" : "M"}${x(elapsed(m)).toFixed(1)}${i ? "V" : ","}${y(margins[i]!).toFixed(1)}`,
+  );
   const text = (tx: number, ty: number, label: string, anchor = "start") =>
     `<text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="${anchor}" fill="#a39e94" font-size="11" font-family="Arial">${label}</text>`;
   let grid = "";
   for (let period = 1; period <= Math.max(4, periods); period++) {
     const start = period <= 4 ? (period - 1) * 720 : 2880 + (period - 5) * 300;
     const end = start + (period <= 4 ? 720 : 300);
-    if (period > 1) grid += `<line x1="${x(start).toFixed(1)}" x2="${x(start).toFixed(1)}" y1="${mid - half}" y2="${mid + half}" stroke="#2a2a2a"/>`;
-    grid += text(x((start + end) / 2), mid + half + 18, period <= 4 ? `Q${period}` : period === 5 ? "OT" : `OT${period - 4}`, "middle");
+    if (period > 1)
+      grid += `<line x1="${x(start).toFixed(1)}" x2="${x(start).toFixed(1)}" y1="${mid - half}" y2="${mid + half}" stroke="#2a2a2a"/>`;
+    grid += text(
+      x((start + end) / 2),
+      mid + half + 18,
+      period <= 4 ? `Q${period}` : period === 5 ? "OT" : `OT${period - 4}`,
+      "middle",
+    );
   }
   return (
     `<svg viewBox="0 0 860 236" role="img" aria-label="Margin through the game">` +
     grid +
     `<line x1="${left}" x2="${right}" y1="${mid}" y2="${mid}" stroke="#2a2a2a"/>` +
-    text(0, mid - half + 4, `+${top}`) + text(0, mid + 4, "0") + text(0, mid + half + 4, `-${top}`) +
+    text(0, mid - half + 4, `+${top}`) +
+    text(0, mid + 4, "0") +
+    text(0, mid + half + 4, `-${top}`) +
     `<path d="${steps.join("")}H${right}" fill="none" stroke="#f4f1ea" stroke-width="2"/>` +
     `</svg>`
   );

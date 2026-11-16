@@ -2,10 +2,6 @@
   "name": "knicks-game-to-game",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": ">=26.13.1",
-    "npm": ">=12.2.2"
-  },
   "scripts": {
     "serve": "node server/main.ts serve",
     "migrate": "node server/main.ts migrate",
@@ -15,7 +11,10 @@
     "dev": "vite web",
     "build": "vite build web",
     "typecheck": "tsc -p web && tsc -p server",
-    "test": "node --test \"server/**/*.test.ts\""
+    "test": "node --test \"server/**/*.test.ts\"",
+    "lint": "oxlint",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
   },
   "dependencies": {
     "@fastify/rate-limit": "11.2.2",
@@ -25,7 +24,13 @@
   },
   "devDependencies": {
     "@types/node": "26.6.6",
+    "oxfmt": "0.77.0",
+    "oxlint": "1.92.0",
     "typescript": "7.0.2",
     "vite": "8.3.5"
+  },
+  "engines": {
+    "node": ">=26.13.1",
+    "npm": ">=12.2.2"
   }
 }

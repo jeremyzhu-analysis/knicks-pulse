@@ -46,10 +46,17 @@ function bothEnds(game: GameDetail): string {
 
 export function renderGame(game: GameDetail): string {
   const periods = game.usByPeriod.map((_, i) => periodName(i));
-  const byPeriod = (p: GamePlayer) => periods.map((_, i) => (p.pointsByPeriod ? String(p.pointsByPeriod[i] ?? 0) : "—"));
+  const byPeriod = (p: GamePlayer) =>
+    periods.map((_, i) => (p.pointsByPeriod ? String(p.pointsByPeriod[i] ?? 0) : "—"));
   const rows = game.players.map((p) => [
     `<a href="#player/${p.id}">${e(p.name)}</a>${p.position ? ` <span class="pos">${e(p.position)}</span>` : ""}`,
-    String(p.minutes), String(p.pts), String(p.reb), String(p.ast), String(p.stl), String(p.blk), String(p.tov),
+    String(p.minutes),
+    String(p.pts),
+    String(p.reb),
+    String(p.ast),
+    String(p.stl),
+    String(p.blk),
+    String(p.tov),
     p.ts === null ? "—" : percent(p.ts),
     signed(p.plusMinus, 0),
     ...byPeriod(p),
@@ -58,7 +65,13 @@ export function renderGame(game: GameDetail): string {
   ]);
   const opponents = game.opponents.map((p) => [
     `${playerName(p)}${p.starter ? ` <span class="pos">S</span>` : ""}`,
-    String(p.minutes), String(p.pts), String(p.reb), String(p.ast), String(p.stl), String(p.blk), String(p.tov),
+    String(p.minutes),
+    String(p.pts),
+    String(p.reb),
+    String(p.ast),
+    String(p.stl),
+    String(p.blk),
+    String(p.tov),
     signed(p.plusMinus, 0),
     ...byPeriod(p),
   ]);

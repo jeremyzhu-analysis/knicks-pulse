@@ -60,7 +60,8 @@ function headlineText(headline: Headline | null): string {
 
 function hero(report: PageData): string {
   const now = report.current;
-  if (!now) return `<section><h1>No games stored yet</h1><p class="note">Run <code>npm run sync</code> to load games from ESPN.</p></section>`;
+  if (!now)
+    return `<section><h1>No games stored yet</h1><p class="note">Run <code>npm run sync</code> to load games from ESPN.</p></section>`;
   const r = now.ratings;
   const last = report.lastRegular?.ratings ?? null;
 
@@ -106,7 +107,13 @@ export function scoreTable(game: Game): string {
 /** Date, opponent and venue. */
 export function gameWhere(game: Game): string {
   const attendance = game.attendance === null ? null : `Attendance ${game.attendance.toLocaleString("en-US")}`;
-  return [longDate(game.startsAt), `${hosted(game) ? "vs" : "at"} ${game.opponent.abbreviation}`, game.venue, attendance, game.note]
+  return [
+    longDate(game.startsAt),
+    `${hosted(game) ? "vs" : "at"} ${game.opponent.abbreviation}`,
+    game.venue,
+    attendance,
+    game.note,
+  ]
     .filter(Boolean)
     .map((w) => e(w!))
     .join(" · ");
@@ -122,7 +129,8 @@ export function pageHeader(): string {
 /** Both rows of navigation: the layers, then the tabs of the layer in view. */
 export function layerNav(layer: string, tab: string): string {
   const current = LAYERS.find((l) => l.id === layer) ?? LAYERS[0];
-  const link = (href: string, label: string, on: boolean) => `<a href="#${href}"${on ? ` class="on"` : ""}>${label}</a>`;
+  const link = (href: string, label: string, on: boolean) =>
+    `<a href="#${href}"${on ? ` class="on"` : ""}>${label}</a>`;
   return (
     `<nav class="layers">${LAYERS.map((l) => link(`${l.id}/${l.tabs[0].id}`, l.label, l === current)).join("")}</nav>` +
     `<nav>${current.tabs.map((t) => link(`${current.id}/${t.id}`, t.label, t.id === tab)).join("")}</nav>`
@@ -139,19 +147,28 @@ function latestGame(game: LatestGame | null): string {
     `${periodName(swing)} ${signed(quartersPlayed[swing] ?? 0, 0)}.`,
     top ? `${e(lastName(top.fullName))} ${top.pts} pts.` : "",
   ].join(" ");
-  return `<section><p class="kicker">Latest game</p><h2>${TEAM} ${game.pts}, ${e(game.opponent.name)} ${game.oppPts}</h2>` +
-    `<p class="note">${gameWhere(game)}</p><p>${summary} <a href="#game/${e(game.id)}">Player by player</a></p>${scoreTable(game)}</section>`;
+  return (
+    `<section><p class="kicker">Latest game</p><h2>${TEAM} ${game.pts}, ${e(game.opponent.name)} ${game.oppPts}</h2>` +
+    `<p class="note">${gameWhere(game)}</p><p>${summary} <a href="#game/${e(game.id)}">Player by player</a></p>${scoreTable(game)}</section>`
+  );
 }
 
 function seasonCards(report: PageData): string {
   const card = (s: Season) => {
     const r = s.ratings;
     const rows: [string, string][] = [
-      ["Margin", signed(r.margin)], ["Offense", fixed(r.offense)], ["Defense", fixed(r.defense)], ["Net", signed(r.net)],
-      ["Pace", fixed(r.pace)], ["Scored", fixed(r.scored)], ["Allowed", fixed(r.allowed)],
+      ["Margin", signed(r.margin)],
+      ["Offense", fixed(r.offense)],
+      ["Defense", fixed(r.defense)],
+      ["Net", signed(r.net)],
+      ["Pace", fixed(r.pace)],
+      ["Scored", fixed(r.scored)],
+      ["Allowed", fixed(r.allowed)],
     ];
-    return `<article class="card"><p class="kicker">${e(s.label)}</p><p class="big">${record(r.wins, r.losses)}</p>` +
-      `<dl>${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl></article>`;
+    return (
+      `<article class="card"><p class="kicker">${e(s.label)}</p><p class="big">${record(r.wins, r.losses)}</p>` +
+      `<dl>${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl></article>`
+    );
   };
   const now = report.current?.ratings;
   const last = report.lastRegular?.ratings;
@@ -168,8 +185,12 @@ function seasonCards(report: PageData): string {
 }
 
 function gameLinks(games: Game[]): string {
-  const links = [...games].reverse().map((g) =>
-    `<a href="#game/${e(g.id)}">${shortDate(g.startsAt)} ${e(g.opponent.abbreviation)} <span class="${won(g) ? "good" : "bad"}">${signed(margin(g), 0)}</span></a>`);
+  const links = [...games]
+    .reverse()
+    .map(
+      (g) =>
+        `<a href="#game/${e(g.id)}">${shortDate(g.startsAt)} ${e(g.opponent.abbreviation)} <span class="${won(g) ? "good" : "bad"}">${signed(margin(g), 0)}</span></a>`,
+    );
   return `<div class="gamelinks">${links.join("")}</div>`;
 }
 
@@ -177,7 +198,10 @@ function gamesSection(report: PageData): string {
   const windows = report.current?.rolling.map((r) => r.window) ?? [];
   const shown = rollingDefault(report.current);
   const windowSwitch = windows
-    .map((w) => `<button type="button" data-group="window" data-pick="${w}" class="${w === shown ? "on" : ""}">${w}-game average</button>`)
+    .map(
+      (w) =>
+        `<button type="button" data-group="window" data-pick="${w}" class="${w === shown ? "on" : ""}">${w}-game average</button>`,
+    )
     .join("");
   const latest = (s: Season) => {
     const g = s.games.at(-1);
@@ -200,7 +224,10 @@ function quartersSection(report: PageData): string {
   const summary = table(
     ["Quarter", "Scored", "Allowed", "Margin", "A–B–T", "Last year", "Change"],
     rows.map((r) => [
-      `Q${r.quarter}`, fixed(r.scored), fixed(r.allowed), cell(r.margin, 6, signed(r.margin)),
+      `Q${r.quarter}`,
+      fixed(r.scored),
+      fixed(r.allowed),
+      cell(r.margin, 6, signed(r.margin)),
       `${r.ahead}–${r.behind}–${r.tied}`,
       r.lastMargin === null ? "—" : signed(r.lastMargin),
       r.lastMargin === null ? "—" : signed(r.margin - r.lastMargin),
@@ -239,12 +266,14 @@ function factorsSection(report: PageData): string {
   const top = Math.max(0.1, ...[...offense, ...defense].map((f) => Math.abs(scale(f))));
   const row = (f: Factor) => {
     const d = scale(f);
-    const color = d === 0 ? "#a39e94" : (d > 0) === f.higherHelps ? "#b7c98a" : "#e09a94";
+    const color = d === 0 ? "#a39e94" : d > 0 === f.higherHelps ? "#b7c98a" : "#e09a94";
     const width = (Math.abs(d) / top) * 50;
     const show = (v: number) => (f.isPercent ? percent(v) : fixed(v));
-    return `<div class="factor"><div><p>${f.label}</p><p class="note">${show(f.now)} <span class="faint">was ${show(f.was)}</span></p></div>` +
+    return (
+      `<div class="factor"><div><p>${f.label}</p><p class="note">${show(f.now)} <span class="faint">was ${show(f.was)}</span></p></div>` +
       `<div class="track"><i style="left:${d < 0 ? 50 - width : 50}%;width:${width}%;background:${color}"></i></div>` +
-      `<b style="color:${color}">${signed(d)}</b></div>`;
+      `<b style="color:${color}">${signed(d)}</b></div>`
+    );
   };
   return `<section>
   <p class="kicker">Team / Offense and defense</p>
@@ -264,8 +293,12 @@ function situationsSection(report: PageData): string {
     .join(" ");
   const card = (s: (typeof list)[number]) => {
     const now = s.now;
-    const big = now ? `<p class="big ${now.margin >= 0 ? "good" : "bad"}">${signed(now.margin)}</p>` : `<p class="big faint">—</p>`;
-    const detail = now ? `<p class="note">${record(now.wins, now.losses)} · ${now.games} g · net ${signed(now.net)}</p>` : `<p class="note">No games</p>`;
+    const big = now
+      ? `<p class="big ${now.margin >= 0 ? "good" : "bad"}">${signed(now.margin)}</p>`
+      : `<p class="big faint">—</p>`;
+    const detail = now
+      ? `<p class="note">${record(now.wins, now.losses)} · ${now.games} g · net ${signed(now.net)}</p>`
+      : `<p class="note">No games</p>`;
     const last = s.last ? `<p class="note">Last year ${signed(s.last.margin)}</p>` : "";
     return `<article class="card"><p class="kicker">${s.label}</p>${big}${detail}${last}</article>`;
   };
@@ -302,7 +335,9 @@ function pairsSection(report: PageData): string {
         return `<tr><th>${e(a.last)}</th>${tds.join("")}</tr>`;
       })
       .join("");
-    const readout = top ? `${top.a}–${top.b} ${signed(top.cell.net48)}. ${Math.round(top.cell.seconds / 60)} shared minutes.` : "";
+    const readout = top
+      ? `${top.a}–${top.b} ${signed(top.cell.net48)}. ${Math.round(top.cell.seconds / 60)} shared minutes.`
+      : "";
     return `<div class="scroll"><table class="pairs"><thead>${head}</thead><tbody>${body}</tbody></table></div><p class="readout">${e(readout)}</p>`;
   };
   return `<section>
@@ -342,8 +377,12 @@ function playersSection(report: PageData): string {
       s.playerReport.players.map((p: PlayerRow) => [
         `<a href="#player/${p.id}">${e(p.name)}</a>${p.position ? ` <span class="pos">${e(p.position)}</span>` : ""}`,
         String(p.gp),
-        sortCell(p.mpg, fixed(p.mpg)), sortCell(p.ppg, fixed(p.ppg)), sortCell(p.rpg, fixed(p.rpg)), sortCell(p.apg, fixed(p.apg)),
-        sortCell(p.ts, percent(p.ts)), sortCell(p.plusMinus, signed(p.plusMinus)),
+        sortCell(p.mpg, fixed(p.mpg)),
+        sortCell(p.ppg, fixed(p.ppg)),
+        sortCell(p.rpg, fixed(p.rpg)),
+        sortCell(p.apg, fixed(p.apg)),
+        sortCell(p.ts, percent(p.ts)),
+        sortCell(p.plusMinus, signed(p.plusMinus)),
         swing(p.onOff),
         ...(compared ? [p.previousOnOff === null ? "—" : signed(p.previousOnOff)] : []),
         sortCell(p.opp48, p.opp48 === null ? "—" : fixed(p.opp48)),
@@ -366,7 +405,15 @@ function shotsSection(report: PageData, maps: ShotMap[], player: string | null):
   <p class="kicker">Players / Shots</p>
   <h2>Where the shots come from</h2>
   <p>Every Knicks field-goal attempt inside half court. Orange dot made, blue ring missed.</p>
-  ${seasonPanels(report, (s) => shotMap(maps.find((m) => m.key === s.key), s.key === open ? player : null), open)}
+  ${seasonPanels(
+    report,
+    (s) =>
+      shotMap(
+        maps.find((m) => m.key === s.key),
+        s.key === open ? player : null,
+      ),
+    open,
+  )}
 </section>`;
 }
 
