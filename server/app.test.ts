@@ -192,6 +192,21 @@ test("every response carries the security headers", async () => {
   }
 });
 
+test("a URL that can't be decoded answers a plain 400 with the security headers", async () => {
+  const { server } = await buildApp(backend(), null, site());
+  for (const url of ["/%E0%A4%A", "/api/games/%zz"]) {
+    const res = await server.inject({ url });
+    assert.equal(res.statusCode, 400, url);
+    assert.equal(res.headers["content-type"], "text/plain; charset=utf-8", url);
+    assert.equal(res.body, "Bad request", url);
+    assert.match(String(res.headers["content-security-policy"]), /default-src 'self'/, url);
+    assert.equal(res.headers["x-content-type-options"], "nosniff", url);
+    assert.equal(res.headers["x-frame-options"], "DENY", url);
+    assert.equal(res.headers["referrer-policy"], "no-referrer", url);
+    assert.equal(res.headers["cross-origin-opener-policy"], "same-origin", url);
+  }
+});
+
 test("sync attempts are limited per visitor, read from the proxy's header", async () => {
   const fake = backend();
   const { server } = await buildApp(fake, "s3cret", site());

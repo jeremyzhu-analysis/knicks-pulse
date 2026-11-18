@@ -163,6 +163,13 @@ export async function buildApp(backend: Backend, syncSecret: string | null, dist
     trustProxy: "loopback",
     // No route reads more than an empty body.
     bodyLimit: 1024,
+    // A URL that can't be decoded is refused before any route or hook sees
+    // it, so this answer has to bring the security headers itself.
+    frameworkErrors: (error, _request, reply) => {
+      const status = error.statusCode ?? 400;
+      if (status >= 500) console.error(error);
+      return text(reply.headers(SECURITY_HEADERS), status, status >= 500 ? "Something went wrong." : "Bad request");
+    },
   });
   await server.register(rateLimit, { global: true, max: REQUESTS_PER_MINUTE, timeWindow: "1 minute" });
   server.addHook("onSend", async (_request, reply) => {
