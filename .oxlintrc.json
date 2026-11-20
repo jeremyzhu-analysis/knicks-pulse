@@ -1,0 +1,10 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "import", "unicorn", "oxc"],
+  "categories": { "correctness": "error" },
+  "rules": {
+    "unicorn/no-new-array": "off",
+    "unicorn/no-useless-spread": "off"
+  },
+  "ignorePatterns": ["design/", "web/dist/"]
+}
