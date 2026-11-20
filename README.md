@@ -1,4 +1,4 @@
-# Knicks game to game
+# Knicks Pulse
 
 A report on the New York Knicks. It started from the design in
 `design/index.html`, a single long page; the report now shows its sections as

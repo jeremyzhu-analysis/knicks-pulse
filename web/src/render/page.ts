@@ -121,7 +121,7 @@ export function gameWhere(game: Game): string {
 
 export function pageHeader(): string {
   return `<header>
-  <div class="brand">${knicksMark}<div><p class="kicker">New York Knicks</p><strong>Game to game</strong><p class="note">${syncControl()}</p></div></div>
+  <div class="brand">${knicksMark}<div><p class="kicker">New York Knicks</p><strong>Pulse</strong><p class="note">${syncControl()}</p></div></div>
   ${liberty}
 </header>`;
 }
