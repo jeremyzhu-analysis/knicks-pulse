@@ -13,6 +13,9 @@ import type { GameSummary, Period, Play, PlayerBox, Team, TeamBox } from "./espn
 const HOST = "https://sports.core.api.espn.com/";
 const EVENTS = "https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/events";
 
+/** A page holds 1000 plays and a game has about 500. */
+const MAX_PLAY_PAGES = 5;
+
 /** The documents of one game, as fetched. */
 export type Documents = {
   competition: unknown;
@@ -54,7 +57,10 @@ export async function coreGameSummary(
   for (let page = 1; ; page++) {
     const json = await getJson(`${base}/plays?limit=1000&page=${page}&lang=en`);
     plays.push(...items(at(json, "items")));
-    if (page >= (wholeNumber(at(json, "pageCount")) ?? 1)) break;
+    const pageCount = wholeNumber(at(json, "pageCount")) ?? 1;
+    if (page >= pageCount) break;
+    // ESPN says how many pages there are; without a limit it would also say how long this runs.
+    if (page >= MAX_PLAY_PAGES) throw new Error(`Game ${gameId} has more than ${MAX_PLAY_PAGES} pages of plays`);
   }
 
   /**
@@ -71,7 +77,12 @@ export async function coreGameSummary(
 
   const sides: Side[] = [];
   for (const competitor of items(at(competition, "competitors"))) {
-    const ofSide = `${base}/competitors/${text(at(competitor, "id"))}`;
+    const competitorId = text(at(competitor, "id"));
+    // It becomes part of the URLs asked for below.
+    if (!/^[0-9]{1,20}$/.test(competitorId)) {
+      throw new Error(`Game ${gameId} has a competitor id that is not a number: ${JSON.stringify(competitorId)}`);
+    }
+    const ofSide = `${base}/competitors/${competitorId}`;
     const team = await getRef(at(competitor, "team"));
     const roster = await getJson(`${ofSide}/roster?lang=en`);
     const statistics = await getJson(`${ofSide}/statistics?lang=en`);

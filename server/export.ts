@@ -51,6 +51,9 @@ export function snapshotJson(documents: readonly [string, unknown][], checkedAt:
  * first one so the page's script finds it. `read` takes the path as written
  * in the page, such as "/assets/index-CH1jHogz.js".
  */
+/** A file directly under /assets/, as Vite names them. */
+const ASSET_PATH = /^\/assets\/[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
+
 export function inlineAssets(index: string, snapshot: string, read: (path: string) => string): string {
   const MARKER = '"/assets/';
   let html = "";
@@ -64,6 +67,8 @@ export function inlineAssets(index: string, snapshot: string, read: (path: strin
     const pathEnd = rest.indexOf('"', pathStart);
     if (pathEnd < 0) throw new Error("index.html: unclosed attribute");
     const path = rest.slice(pathStart, pathEnd);
+    // `read` opens the path below the built page's folder.
+    if (!ASSET_PATH.test(path)) throw new Error(`index.html: unexpected asset path ${JSON.stringify(path)}`);
     const tag = rest.slice(start);
     const content = read(path);
     html += rest.slice(0, start);
@@ -74,14 +79,15 @@ export function inlineAssets(index: string, snapshot: string, read: (path: strin
     let end: number;
     if (tag.startsWith("<script")) {
       scripts++;
-      // "</script" inside the code would end the element early; "<\/"
-      // means the same to JavaScript in a string or a regular expression.
-      html += `<script type="module">${content.replaceAll("</script", "<\\/script")}</script>`;
+      // "</script" inside the code, in any case, would end the element
+      // early; "<\/" means the same to JavaScript in a string or a regular
+      // expression.
+      html += `<script type="module">${content.replace(/<\/(script)/gi, "<\\/$1")}</script>`;
       const close = tag.indexOf("</script>");
       if (close < 0) throw new Error("index.html: unclosed <script>");
       end = close + "</script>".length;
     } else if (tag.startsWith("<link")) {
-      if (content.includes("</style")) throw new Error(`${path} contains </style and can't be inlined`);
+      if (/<\/style/i.test(content)) throw new Error(`${path} contains </style and can't be inlined`);
       html += `<style>${content}</style>`;
       const close = tag.indexOf(">");
       if (close < 0) throw new Error("index.html: unclosed <link>");

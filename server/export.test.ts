@@ -25,3 +25,19 @@ test("inlines the script and stylesheet after the snapshot", () => {
   );
   assert.throws(() => inlineAssets("<body></body>", "{}", () => ""));
 });
+
+test("inlined code cannot close its element whatever the case", () => {
+  const index =
+    '<head><script type="module" src="/assets/a.js"></script><link rel="stylesheet" href="/assets/a.css"></head>';
+  const html = inlineAssets(index, "{}", (path) => (path.endsWith(".js") ? 'a("</SCRIPT>", "</Script >")' : "b{}"));
+  assert.ok(!/<\/script[^>]*>[^]*<\/script/i.test(html.slice(html.indexOf('type="module"'), html.indexOf("<style>"))));
+  assert.ok(html.includes('a("<\\/SCRIPT>", "<\\/Script >")'));
+  assert.throws(() => inlineAssets(index, "{}", (path) => (path.endsWith(".js") ? "x" : "a{}</STYLE>")), /<\/style/i);
+});
+
+test("inlines only files named directly under /assets/", () => {
+  const index = '<head><script type="module" src="/assets/../../.env"></script></head>';
+  const read: string[] = [];
+  assert.throws(() => inlineAssets(index, "{}", (path) => (read.push(path), "x")), /asset path/);
+  assert.deepEqual(read, []);
+});

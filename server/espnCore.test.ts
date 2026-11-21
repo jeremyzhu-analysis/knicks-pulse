@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { build } from "./espnCore.ts";
+import { build, coreGameSummary } from "./espnCore.ts";
 import type { Side } from "./espnCore.ts";
 
 function stats(category: string, values: [string, number][]): unknown {
@@ -86,4 +86,26 @@ test("builds a game from core documents", () => {
     [play.shooting, play.scoreValue, play.pointsAttempted, play.position],
     [true, 2, 2, { x: 26, y: 12 }],
   );
+});
+
+test("stops asking for play pages at a fixed number", async () => {
+  let pages = 0;
+  const getJson = async (url: string) => {
+    if (!url.includes("/plays?")) return {};
+    pages++;
+    return { items: [{}], pageCount: 500 };
+  };
+  await assert.rejects(coreGameSummary(getJson, "401", 2027, 2, null), /more than \d+ pages of plays/);
+  assert.ok(pages <= 20, `asked for ${pages} pages`);
+});
+
+test("refuses a competitor id that is not a number", async () => {
+  const asked: string[] = [];
+  const getJson = async (url: string) => {
+    asked.push(url);
+    if (url.includes("/plays?")) return { items: [], pageCount: 1 };
+    return { competitors: [{ id: "1/../../x", team: { $ref: "http://sports.core.api.espn.com/t" } }] };
+  };
+  await assert.rejects(coreGameSummary(getJson, "401", 2027, 2, null), /competitor id/);
+  assert.ok(!asked.some((url) => url.includes("..")));
 });

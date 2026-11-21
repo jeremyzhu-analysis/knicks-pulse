@@ -405,7 +405,7 @@ export type SyncOutcome = Static<typeof SyncOutcome>;
 export const IdParams = Type.Object({ id: Type.String({ pattern: "^[0-9]{1,20}$" }) });
 export type IdParams = Static<typeof IdParams>;
 
-/** Routes without a query string or a body accept none. */
+/** Routes without a query string or a body read none: unknown query keys are dropped before the handler runs. */
 export const NoQuery = Type.Object({}, { additionalProperties: false });
 export const NoBody = Type.Null();
 

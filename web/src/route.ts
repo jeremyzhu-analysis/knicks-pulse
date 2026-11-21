@@ -37,11 +37,15 @@ const ANCHORS: Record<string, string> = {
   players: "players/impact",
 };
 
+const ID = /^[0-9]{1,20}$/;
+
 /** "#team/games", "#players/shots/3934672", "#game/401…", "#player/3934672"; anything unknown is the first tab. */
 export function parseHash(hash: string): View {
   const path = hash.replace(/^#/, "");
-  const [first = "", second = "", third = ""] = (ANCHORS[path] ?? path).split("/");
-  if ((first === "game" || first === "player") && second) return { page: first, id: second };
+  // hasOwn: "#constructor" would otherwise find Object.prototype's.
+  const [first = "", second = "", third = ""] = (Object.hasOwn(ANCHORS, path) ? ANCHORS[path]! : path).split("/");
+  // The id becomes part of the URL the page fetches; the API takes the same form.
+  if ((first === "game" || first === "player") && ID.test(second)) return { page: first, id: second };
   const layer = LAYERS.find((l) => l.id === first) ?? LAYERS[0];
   const tab = layer.tabs.find((t) => t.id === second) ?? layer.tabs[0];
   return { page: "report", layer: layer.id, tab: tab.id, arg: third || null };

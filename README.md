@@ -120,7 +120,8 @@ button asks for one too (`POST /api/sync`; `GET /api/sync` tells when the
 last one finished). That request must carry `SYNC_SECRET` from `.env` as
 `Authorization: Bearer <secret>`; the page asks for the secret on the first
 click and keeps it in the browser's local storage. With `SYNC_SECRET` empty
-the route refuses every request. The
+the route refuses every request; a secret shorter than 16 characters stops
+the server from starting. The
 header then says what the check did: how many new games it stored, or how
 many recent ones it fetched again. Syncs
 never overlap: a request made while one runs starts none. A sync fetches the games that
@@ -159,7 +160,8 @@ Ctrl-C closes the tunnel, and the address stops working. What to know:
 
 - Anyone who has the address can read the site; there is no login. To ask
   visitors for a one-time code sent to an email address you name, run
-  `npm run tunnel -- --allowed-mail mate@example.com`.
+  `npm run tunnel -- --allowed-mail mate@example.com` (cloudflared 2026.9.3
+  or newer).
 - The address changes every time the tunnel starts. Cloudflare gives quick
   tunnels no uptime guarantee and at most 200 requests in flight; they are
   meant for testing.

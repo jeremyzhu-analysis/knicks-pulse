@@ -9,7 +9,7 @@ import fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import type { Pool } from "mysql2/promise";
 
 import { documents, type Document } from "./api.ts";
-import { TEAM_ID, type Config } from "./config.ts";
+import { isLoopback, TEAM_ID, type Config } from "./config.ts";
 import { Espn } from "./espn.ts";
 import { DIST } from "./export.ts";
 import { loadDataset } from "./report/load.ts";
@@ -361,6 +361,11 @@ export async function serve(config: Config, pool: Pool): Promise<void> {
     throw new Error(`listening on ${config.host}:${config.port}`, { cause: error });
   }
   console.log(`Listening on http://${config.host}:${config.port}`);
+  if (!isLoopback(config.host)) {
+    console.error(
+      `HOST is ${config.host}: other machines can reach this server directly, and the sync secret travels unencrypted.`,
+    );
+  }
 
   const stop = new AbortController();
   void syncLoop(app, config.syncIntervalMinutes, stop.signal);

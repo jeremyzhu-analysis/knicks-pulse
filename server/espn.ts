@@ -10,6 +10,9 @@ import { coreGameSummary } from "./espnCore.ts";
 
 const BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
 
+/** ESPN's id of a game, as the schedule writes it. */
+const GAME_ID = /^[1-9][0-9]{0,19}$/;
+
 export const REGULAR_SEASON = 2;
 export const PLAYOFFS = 3;
 
@@ -132,18 +135,58 @@ export type GameSummary = {
   plays: Play[];
 };
 
+/** One request, headers to the end of the body. A game summary arrives in a second or two. */
+const REQUEST_TIMEOUT_MS = 30_000;
+/** The largest answer that is read. A game summary is about 1 MiB. */
+const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
+
+/**
+ * The body of `res` as JSON, read no further than `maxBytes`: what ESPN sends
+ * decides how much memory the server uses otherwise. `url` names the document
+ * in error messages.
+ */
+export async function jsonWithin(res: Response, maxBytes: number, url: string): Promise<unknown> {
+  const tooLarge = () => new Error(`${url} is larger than ${maxBytes} bytes`);
+  if (Number(res.headers.get("content-length")) > maxBytes) {
+    await res.body?.cancel();
+    throw tooLarge();
+  }
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  if (res.body) {
+    const reader = res.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel();
+        throw tooLarge();
+      }
+      chunks.push(value);
+    }
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch (cause) {
+    throw new Error(`parsing ${url}`, { cause });
+  }
+}
+
 export class Espn {
-  /** Up to 3 attempts; only 5xx answers are retried, after 1 s and then 2 s. */
+  /**
+   * Up to 3 attempts; only 5xx answers are retried, after 1 s and then 2 s.
+   * A redirect is an error: the URLs asked for are ESPN's own, and following
+   * one would take the request to a host nobody checked.
+   */
   async getJson(url: string): Promise<unknown> {
     for (let attempt = 1; ; attempt++) {
-      const res = await fetch(url, { headers: { accept: "application/json" } });
-      if (res.ok) {
-        try {
-          return await res.json();
-        } catch (cause) {
-          throw new Error(`parsing ${url}`, { cause });
-        }
-      }
+      const res = await fetch(url, {
+        headers: { accept: "application/json" },
+        redirect: "error",
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      if (res.ok) return jsonWithin(res, MAX_RESPONSE_BYTES, url);
       // An unread body keeps its connection open.
       await res.body?.cancel();
       if (attempt >= 3 || res.status < 500) throw new EspnHttpError(res.status, url);
@@ -185,10 +228,12 @@ export function parseSchedule(document: unknown, seasonYear: number | null, sour
   if (year === null || year === 0) throw new Error("ESPN schedule has no requestedSeason");
   const completedGames = (json.events ?? [])
     .filter((event) => event.competitions?.[0]?.status?.type?.completed === true)
-    .map((event) => ({
-      note: event.competitions?.[0]?.notes?.[0]?.headline || null,
-      id: event.id,
-    }));
+    .map((event) => {
+      // The id goes into the URLs of the game's documents and into log lines.
+      if (!GAME_ID.test(event.id))
+        throw new Error(`ESPN schedule has a game id that is not a number: ${JSON.stringify(event.id)}`);
+      return { note: event.competitions?.[0]?.notes?.[0]?.headline || null, id: event.id };
+    });
   return { seasonYear: year, completedGames };
 }
 
@@ -235,6 +280,12 @@ export function parseSummary(gameId: string, document: unknown, source = "ESPN s
       ptsOffTov: int(stat("turnoverPoints")),
     };
   });
+  // The report needs the stats of both teams for every stored game.
+  const boxed = teamBoxes.map((box) => box.teamId).sort();
+  const playing = [int(home.team.id), int(away.team.id)].sort();
+  if (boxed.length !== 2 || boxed[0] !== playing[0] || boxed[1] !== playing[1]) {
+    throw new Error(`Game ${gameId} doesn't have the team stats of both teams`);
+  }
 
   const playerBoxes: PlayerBox[] = [];
   for (const boxSide of json.boxscore.players ?? []) {

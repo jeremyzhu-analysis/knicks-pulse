@@ -13,7 +13,7 @@ test("reads settings with their defaults", () => {
     syncSecret: null,
   });
   assert.equal(configFrom({ DATABASE_URL: "x", SYNC_INTERVAL_MINUTES: "0" }).syncIntervalMinutes, 0);
-  assert.equal(configFrom({ DATABASE_URL: "x", SYNC_SECRET: "s3cret" }).syncSecret, "s3cret");
+  assert.equal(configFrom({ DATABASE_URL: "x", SYNC_SECRET: "0123456789abcdef" }).syncSecret, "0123456789abcdef");
 });
 
 test("refuses a missing database and numbers that aren't whole", () => {
@@ -21,4 +21,12 @@ test("refuses a missing database and numbers that aren't whole", () => {
   assert.throws(() => configFrom({ DATABASE_URL: "x", PORT: "3000.5" }), /PORT must be a whole number, got "3000.5"/);
   assert.throws(() => configFrom({ DATABASE_URL: "x", PORT: "70000" }), /PORT must be a whole number/);
   assert.throws(() => configFrom({ DATABASE_URL: "x", SYNC_INTERVAL_MINUTES: "-1" }), /whole number/);
+});
+
+test("refuses a sync secret short enough to guess", () => {
+  assert.throws(
+    () => configFrom({ DATABASE_URL: "x", SYNC_SECRET: "s3cret" }),
+    /SYNC_SECRET must be at least 16 characters/,
+  );
+  assert.throws(() => configFrom({ DATABASE_URL: "x", SYNC_SECRET: "0123456789abcde" }), /SYNC_SECRET/);
 });

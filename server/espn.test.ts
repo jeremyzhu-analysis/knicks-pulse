@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { int, madeAttempted, parseClock, parseEspnDate, parseSummary } from "./espn.ts";
+import { int, jsonWithin, madeAttempted, parseClock, parseEspnDate, parseSchedule, parseSummary } from "./espn.ts";
 
 test("int parses like parseInt", () => {
   assert.equal(int("12"), 12);
@@ -58,7 +58,10 @@ test("skips players who did not play even without a name", () => {
        "shootingPlay": true, "scoreValue": 1, "coordinate": {"x": -214748340, "y": -214748365}}
     ],
     "boxscore": {
-      "teams": [{"team": {"id": "18"}, "statistics": [{"name": "fieldGoalsMade-fieldGoalsAttempted", "displayValue": "40-85"}]}],
+      "teams": [
+        {"team": {"id": "18"}, "statistics": [{"name": "fieldGoalsMade-fieldGoalsAttempted", "displayValue": "40-85"}]},
+        {"team": {"id": "10"}, "statistics": []}
+      ],
       "players": [{"team": {"id": "18"}, "statistics": [{"names": ["MIN", "PTS", "FG", "+/-"], "athletes": [
         {"athlete": {"id": "1", "displayName": "Jalen Brunson", "position": {"abbreviation": "G"}},
          "starter": true, "didNotPlay": false, "stats": ["36", "31", "11-22", "+5"]},
@@ -84,4 +87,66 @@ test("skips players who did not play even without a name", () => {
   );
   const freeThrow = game.plays[1]!;
   assert.deepEqual([freeThrow.shooting, freeThrow.pointsAttempted, freeThrow.position], [true, 0, null]);
+});
+
+const summary = (teams: unknown[]) => ({
+  header: {
+    season: { year: 2027, type: 2 },
+    competitions: [
+      {
+        date: "2026-11-03T00:30Z",
+        status: { type: { completed: true } },
+        competitors: [
+          {
+            id: "18",
+            homeAway: "home",
+            score: "100",
+            team: { id: "18", abbreviation: "NY", displayName: "A", name: "A" },
+          },
+          {
+            id: "2",
+            homeAway: "away",
+            score: "90",
+            team: { id: "2", abbreviation: "BOS", displayName: "B", name: "B" },
+          },
+        ],
+      },
+    ],
+  },
+  boxscore: { teams },
+});
+
+test("refuses a summary without the stats of both teams", () => {
+  const box = (id: string) => ({ team: { id }, statistics: [] });
+  assert.equal(parseSummary("401", summary([box("18"), box("2")])).teamBoxes.length, 2);
+  assert.throws(() => parseSummary("401", summary([])), /team stats/);
+  assert.throws(() => parseSummary("401", summary([box("18")])), /team stats/);
+  assert.throws(() => parseSummary("401", summary([box("18"), box("5")])), /team stats/);
+  assert.throws(() => parseSummary("401", summary([box("18"), box("18")])), /team stats/);
+});
+
+test("refuses a schedule whose game id is not a number", () => {
+  const schedule = (id: string) => ({
+    requestedSeason: { year: 2027 },
+    events: [{ id, competitions: [{ status: { type: { completed: true } } }] }],
+  });
+  assert.deepEqual(parseSchedule(schedule("401810001"), null).completedGames, [{ id: "401810001", note: null }]);
+  for (const id of ["401&event=1", "../401", "0401", "4 01", "401\n", ""]) {
+    assert.throws(() => parseSchedule(schedule(id), null), /game id/, JSON.stringify(id));
+  }
+});
+
+test("stops reading an answer that is larger than allowed", async () => {
+  assert.deepEqual(await jsonWithin(new Response('{"a":1}'), 7, "u"), { a: 1 });
+  await assert.rejects(jsonWithin(new Response('{"a":12}'), 7, "u"), /larger than 7 bytes/);
+  // Without a content-length the body is counted as it arrives.
+  let sent = 0;
+  const endless = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      sent++;
+      controller.enqueue(new Uint8Array(1024).fill(32));
+    },
+  });
+  await assert.rejects(jsonWithin(new Response(endless), 4096, "u"), /larger than 4096 bytes/);
+  assert.ok(sent < 20, `read ${sent} chunks`);
 });
